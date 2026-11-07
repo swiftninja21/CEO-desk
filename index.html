@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#07080c">
+  <meta name="color-scheme" content="dark">
+  <meta name="description" content="CEO Desk — a read-only live view of Aj's public Solana wallet.">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="CEO Desk">
+  <title>CEO Desk</title>
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="icon" href="./favicon.png" type="image/png">
+  <link rel="apple-touch-icon" href="./apple-touch-icon.png">
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <div class="app">
+    <header class="top">
+      <div class="brand">
+        <span class="mark" aria-hidden="true"></span>
+        <div>
+          <h1>CEO Desk</h1>
+          <p class="subhead">Aj · Solana · read only</p>
+        </div>
+      </div>
+      <div class="live is-wait" id="live-pill">
+        <span class="dot" id="live-dot" aria-hidden="true"></span>
+        <span id="live-label">LOADING</span>
+      </div>
+    </header>
+
+    <p class="status" id="status" role="status">loading public data</p>
+    <p class="fine" id="status-note"></p>
+    <p class="clock-line"><span id="clock">—</span></p>
+
+    <section class="metrics" aria-label="Session">
+      <article class="metric">
+        <h2>Start</h2>
+        <p class="num" id="start-sol">1.106 SOL</p>
+        <p class="sub" id="start-usd">$99.10</p>
+      </article>
+      <article class="metric">
+        <h2>Balance</h2>
+        <p class="num" id="bal-sol">—</p>
+        <p class="sub" id="bal-usd">waiting for RPC</p>
+      </article>
+      <article class="metric flat" id="pnl-card">
+        <h2>Net P&amp;L</h2>
+        <p class="num" id="pnl-usd">—</p>
+        <p class="sub" id="pnl-sol">—</p>
+      </article>
+      <article class="metric">
+        <h2>Elapsed</h2>
+        <p class="num" id="elapsed">—</p>
+        <p class="sub">since 12:08 PM ET</p>
+      </article>
+    </section>
+
+    <p class="fine" id="stake-note"></p>
+
+    <section class="card" aria-labelledby="spark-title">
+      <div class="card-head">
+        <h2 id="spark-title">Session</h2>
+      </div>
+      <canvas id="spark" width="640" height="168" aria-label="Sparkline of polled balance"></canvas>
+      <p class="fine" id="spark-caption">No session points yet.</p>
+    </section>
+
+    <section class="card" aria-labelledby="wallet-title">
+      <div class="card-head">
+        <h2 id="wallet-title">Wallet</h2>
+        <button type="button" class="ghost" data-copy="7MDqGWcdgesJHxWs2a1YSaKobcqWe7yU5kjz4XNBKPMa">copy</button>
+      </div>
+      <a class="addr" id="wallet-addr" href="https://solscan.io/account/7MDqGWcdgesJHxWs2a1YSaKobcqWe7yU5kjz4XNBKPMa" target="_blank" rel="noopener noreferrer">7MDqGWcdgesJHxWs2a1YSaKobcqWe7yU5kjz4XNBKPMa</a>
+    </section>
+
+    <section class="card" aria-labelledby="target-title">
+      <div class="card-head">
+        <h2 id="target-title">Copy target</h2>
+        <button type="button" class="ghost" data-copy="C2P1Zap9Qb6ovaXiUPH4cVbJCDUjbmhzwngcDFTgFp8v">copy</button>
+      </div>
+      <a class="addr" id="target-addr" href="https://solscan.io/account/C2P1Zap9Qb6ovaXiUPH4cVbJCDUjbmhzwngcDFTgFp8v" target="_blank" rel="noopener noreferrer">C2P1Zap9Qb6ovaXiUPH4cVbJCDUjbmhzwngcDFTgFp8v</a>
+      <div id="target-body"><p class="muted">Loading last signature…</p></div>
+    </section>
+
+    <section class="card" aria-labelledby="agents-title">
+      <div class="card-head">
+        <h2 id="agents-title">Agents</h2>
+      </div>
+      <p class="fine">Countdowns are the next America/New_York run. No scan results are invented.</p>
+      <div class="agents" id="agents"></div>
+    </section>
+
+    <section class="card" aria-labelledby="pos-title">
+      <div class="card-head">
+        <h2 id="pos-title">Positions</h2>
+      </div>
+      <div id="positions"><p class="muted">Loading token accounts…</p></div>
+    </section>
+
+    <section class="card" aria-labelledby="risk-title">
+      <div class="card-head">
+        <h2 id="risk-title">Risk</h2>
+      </div>
+      <dl class="rules">
+        <div><dt>Buy</dt><dd>0.1 SOL</dd></div>
+        <div><dt>Take profit</dt><dd>Sell 67% at +50%</dd></div>
+        <div><dt>Stop loss</dt><dd>−30%</dd></div>
+        <div><dt>Max open</dt><dd>2</dd></div>
+        <div><dt>Day stop</dt><dd>After −$10</dd></div>
+      </dl>
+      <div class="checks" id="checks"></div>
+    </section>
+
+    <section class="card" aria-labelledby="log-title">
+      <div class="card-head">
+        <h2 id="log-title">Log</h2>
+      </div>
+      <div class="log" id="log"><p class="muted">Loading recent signatures…</p></div>
+    </section>
+
+    <footer>
+      <p>Read-only public data. Solana JSON-RPC, CoinGecko, DexScreener, and Coinbase. No wallet connection and no private keys.</p>
+      <p>USD P&amp;L is native SOL, plus any priced token balances, minus the $99.10 stake. SOL P&amp;L is that portfolio in SOL minus 1.106, or the native difference when no tokens are held.</p>
+    </footer>
+  </div>
+  <noscript>
+    <p class="noscript">CEO Desk needs JavaScript to load public Solana and price data. Nothing here can move funds.</p>
+  </noscript>
+  <script type="module" src="./app.js"></script>
+</body>
+</html>

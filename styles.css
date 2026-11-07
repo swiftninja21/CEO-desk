@@ -577,8 +577,8 @@ h1 {
   font-size: 12px;
 }
 .rules div:first-child { border-top: 0; }
-.rules dt { color: var(--dim); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10px; }
-.rules dd { margin: 0; text-align: right; }
+.rules dt { color: var(--dim); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10px; flex: none; }
+.rules dd { margin: 0; text-align: right; overflow-wrap: anywhere; min-width: 0; }
 
 .checks { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
 .check {

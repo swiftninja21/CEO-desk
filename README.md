@@ -7,7 +7,7 @@ GitHub Pages (main branch, root): https://swiftninja21.github.io/CEO-desk/
 The desk reads:
 
 - Solana `getBalance`, `getSignaturesForAddress`, and `getTokenAccountsByOwner` (SPL Token and Token-2022) for `7MDqGWcdgesJHxWs2a1YSaKobcqWe7yU5kjz4XNBKPMa`
-- The copy target Johnson, `J9TYAsWWidbrcZybmLSfrLzryANf4CgJBLdvwdGuC8MB`
+- Copy target Johnson, `J9TYAsWWidbrcZybmLSfrLzryANf4CgJBLdvwdGuC8MB`, with backup Doji, `5ZuV8eqkvzYFVEKbLvGBdexL2tFv7E5BCd2HZpjqbdg`
 - SOL/USD from CoinGecko, then DexScreener, then Coinbase
 - Token names and prices from DexScreener when a balance exists
 

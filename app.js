@@ -1039,13 +1039,13 @@ function renderRisk() {
   if (book.nativeSol == null) {
     host.append(check("Buy size", "Native SOL has not loaded.", "wait"));
   } else if (book.nativeSol + 1e-9 < 0.1) {
-    host.append(check("Buy size", "Native balance is under the 0.1 SOL buy size.", "bad"));
+    host.append(check("Buy size", "Native balance is under the fixed 0.1 SOL buy.", "bad"));
   } else {
-    host.append(check("Buy size", "Native balance covers a 0.1 SOL buy.", "ok"));
+    host.append(check("Buy size", "Native balance covers the fixed 0.1 SOL buy.", "ok"));
   }
   host.append(check(
-    "Stops",
-    "Take-profit and stop-loss need an entry. This desk does not invent one.",
+    "Sells",
+    "Copy sell is on. Auto sell is 50% at +100% and 100% at −30%. No entry is stored here.",
     "wait"
   ));
 }

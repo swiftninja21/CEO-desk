@@ -306,10 +306,11 @@ export function mountCity(getSnapshot) {
       const slot = SLOTS[tower.id];
       const y = slot.fy * view.h;
       const x = slot.side === "right" ? view.w - 112 : slot.side === "center" ? view.w / 2 - 52 : 8;
+      const phase = litState(tower.id);
       btn.style.transform = `translate(${x}px, ${y}px)`;
       if (withLines) {
         ctx.save();
-        ctx.strokeStyle = hexAlpha(tower.color, state.on ? 0.7 : 0.28);
+        ctx.strokeStyle = hexAlpha(tower.color, phase.on ? 0.7 : 0.28);
         ctx.lineWidth = 1;
         ctx.beginPath();
         ctx.moveTo(x + 8, y + 16);
@@ -317,19 +318,18 @@ export function mountCity(getSnapshot) {
         ctx.stroke();
         ctx.restore();
       }
-      const state = litState(tower.id);
-      btn.classList.toggle("is-on", state.on);
+      btn.classList.toggle("is-on", phase.on);
       const name = btn.querySelector("strong");
       const st = btn.querySelector(".tl-state");
       const earn = btn.querySelector(".tl-earn");
       if (name.textContent !== tower.name) name.textContent = tower.name;
-      let stateText = state.label;
-      if (tower.id !== "trojan" && snap && !state.on) {
+      let stateText = phase.label;
+      if (tower.id !== "trojan" && snap && !phase.on) {
         const agent = snap.agents.find((item) => item.id === tower.id);
         if (agent) stateText = "STANDBY · " + agent.countText;
       }
       if (st.textContent !== stateText) st.textContent = stateText;
-      if (earn.textContent !== state.earn) earn.textContent = state.earn;
+      if (earn.textContent !== phase.earn) earn.textContent = phase.earn;
     }
   }
 

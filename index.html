@@ -20,7 +20,20 @@
   <div class="app">
     <header class="top">
       <div class="brand">
-        <span class="mark" aria-hidden="true"></span>
+        <div class="mascot is-calm" id="mascot">
+          <svg class="mascot-svg" viewBox="0 0 64 64" aria-hidden="true">
+            <path d="M32 8 V16" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+            <circle cx="32" cy="6.5" r="2.2" fill="currentColor"/>
+            <rect x="14" y="16" width="36" height="28" rx="10" fill="#07140c" stroke="currentColor" stroke-width="1.7"/>
+            <g class="eyes">
+              <circle class="eye" cx="25" cy="29" r="3"/>
+              <circle class="eye" cx="39" cy="29" r="3"/>
+            </g>
+            <path class="mouth calm" d="M26 38 Q32 41 38 38" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            <path class="mouth excited" d="M24 36 Q32 46 40 36" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+          </svg>
+          <span class="sr-only" id="mascot-mood">Calm</span>
+        </div>
         <div>
           <h1>CEO Desk</h1>
           <p class="subhead">Aj · Solana · read only</p>
@@ -35,6 +48,18 @@
     <p class="status" id="status" role="status">loading public data</p>
     <p class="fine" id="status-note"></p>
     <p class="clock-line"><span id="clock">—</span></p>
+
+    <div class="ticker" id="ticker">
+      <div class="ticker-track" id="ticker-track"></div>
+    </div>
+
+    <section class="card fleet" aria-labelledby="fleet-title">
+      <div class="card-head">
+        <h2 id="fleet-title">Bot fleet</h2>
+      </div>
+      <p class="fine">America/New_York cron. RUNNING is the two minutes after a scheduled time. These are scheduled times, not live telemetry.</p>
+      <div class="fleet-grid" id="fleet"></div>
+    </section>
 
     <section class="metrics" aria-label="Session">
       <article class="metric">
@@ -84,14 +109,6 @@
       </div>
       <a class="addr" id="target-addr" href="https://solscan.io/account/C2P1Zap9Qb6ovaXiUPH4cVbJCDUjbmhzwngcDFTgFp8v" target="_blank" rel="noopener noreferrer">C2P1Zap9Qb6ovaXiUPH4cVbJCDUjbmhzwngcDFTgFp8v</a>
       <div id="target-body"><p class="muted">Loading last signature…</p></div>
-    </section>
-
-    <section class="card" aria-labelledby="agents-title">
-      <div class="card-head">
-        <h2 id="agents-title">Agents</h2>
-      </div>
-      <p class="fine">Countdowns are the next America/New_York run. No scan results are invented.</p>
-      <div class="agents" id="agents"></div>
     </section>
 
     <section class="card" aria-labelledby="pos-title">

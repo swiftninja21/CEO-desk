@@ -1,12 +1,13 @@
+import { botAvatar } from "./bots.js";
 import {
   AGENTS,
   STAKE_AT,
   STAKE_SOL,
   STAKE_USD,
+  botPhase,
   formatCountdown,
   formatElapsed,
   formatEt,
-  nextAgentRun,
 } from "./schedule.js";
 
 const WALLET = "7MDqGWcdgesJHxWs2a1YSaKobcqWe7yU5kjz4XNBKPMa";
@@ -50,6 +51,9 @@ const state = {
   markets: new Map(),
   marketError: "",
   spark: loadSpark(),
+  seenSigs: null,
+  freshSigUntil: 0,
+  balanceChanges: [],
 };
 
 function loadSpark() {
@@ -533,6 +537,26 @@ function portfolio() {
 }
 
 function applyChain(partial) {
+  if (Array.isArray(partial.walletSigs)) {
+    const ids = partial.walletSigs.map((sig) => sig.signature).filter(Boolean);
+    if (state.seenSigs) {
+      const novel = ids.some((id) => !state.seenSigs.has(id));
+      if (novel) state.freshSigUntil = Date.now() + 3 * 60 * 1000;
+    }
+    state.seenSigs = new Set(ids);
+  }
+  if (
+    state.balanceLamports != null &&
+    Number.isSafeInteger(partial.lamports) &&
+    partial.lamports !== state.balanceLamports
+  ) {
+    state.balanceChanges.unshift({
+      t: Date.now(),
+      from: state.balanceLamports,
+      to: partial.lamports,
+    });
+    state.balanceChanges = state.balanceChanges.slice(0, 4);
+  }
   state.endpoint = partial.endpoint;
   state.balanceLamports = partial.lamports;
   state.walletSigs = partial.walletSigs;
@@ -741,41 +765,120 @@ function line(text) {
   return p;
 }
 
-function renderAgents() {
-  const host = $("agents");
+function renderFleet() {
+  const host = $("fleet");
   const now = new Date();
   const existing = new Map([...host.querySelectorAll("[data-agent]")].map((node) => [node.dataset.agent, node]));
   for (const agent of AGENTS) {
     let card = existing.get(agent.id);
     if (!card) {
       card = document.createElement("article");
-      card.className = "agent";
+      card.className = "bot";
       card.dataset.agent = agent.id;
-      card.innerHTML =
-        '<div class="agent-top"><span class="agent-dot"></span><span class="agent-flag"></span></div>' +
-        "<h3></h3><p class=\"agent-schedule\"></p><p class=\"agent-next\"></p><p class=\"agent-count\"></p>";
-      card.querySelector("h3").textContent = agent.name;
-      card.querySelector(".agent-schedule").textContent = agent.schedule;
+      const face = document.createElement("div");
+      face.className = "bot-face";
+      face.innerHTML = botAvatar(agent.id);
+      const copy = document.createElement("div");
+      copy.className = "bot-copy";
+      copy.innerHTML =
+        "<h3></h3><p class=\"bot-cron\"></p>" +
+        "<p class=\"bot-phase\"><span class=\"bot-dot\"></span><span class=\"bot-phase-label\"></span>" +
+        "<span class=\"typing\" aria-hidden=\"true\"><i></i><i></i><i></i></span></p>" +
+        "<p class=\"bot-count\"></p><p class=\"bot-when\"></p>";
+      copy.querySelector("h3").textContent = agent.name;
+      copy.querySelector(".bot-cron").textContent = agent.cron;
+      card.append(face, copy);
       host.append(card);
     }
-    const next = nextAgentRun(agent, now);
-    const flag = card.querySelector(".agent-flag");
-    const count = card.querySelector(".agent-count");
-    const when = card.querySelector(".agent-next");
-    if (agent.kind === "always") {
-      flag.textContent = "ACTIVE (always on)";
-      when.textContent = "No schedule. Nothing is inferred from scans.";
-      count.textContent = "running";
-      card.classList.add("always");
+    const phase = botPhase(agent, now);
+    card.classList.toggle("is-running", phase.running);
+    card.classList.toggle("is-standby", !phase.running);
+    card.querySelector(".bot-phase-label").textContent = phase.running ? "RUNNING" : "STANDBY";
+    const count = card.querySelector(".bot-count");
+    const when = card.querySelector(".bot-when");
+    if (phase.running) {
+      count.textContent = "2 min window";
+      when.textContent = "Scheduled until " + formatEt(phase.windowEnds, { seconds: false, zone: true });
     } else {
-      flag.textContent = "ACTIVE (scheduled)";
-      const ms = next.getTime() - now.getTime();
-      when.textContent = "Next " + formatEt(next, { zone: true });
-      count.textContent = ms <= 0 ? "due" : "in " + formatCountdown(ms);
-      count.classList.toggle("soon", ms < 60_000 && ms > 0);
-      count.classList.toggle("due", ms <= 0);
+      count.textContent = "in " + formatCountdown(phase.countdownMs);
+      when.textContent = "Next " + formatEt(phase.next, { seconds: false, zone: true });
     }
   }
+}
+
+function renderMascot() {
+  const el = $("mascot");
+  const book = portfolio();
+  const holdsToken = book.known && book.rows.length > 0;
+  const freshSig = Date.now() < state.freshSigUntil;
+  const excited = holdsToken || freshSig;
+  el.classList.toggle("is-excited", excited);
+  el.classList.toggle("is-calm", !excited);
+  const mood = $("mascot-mood");
+  if (holdsToken) mood.textContent = "Excited. The wallet holds a token.";
+  else if (freshSig) mood.textContent = "Excited. A new wallet signature arrived.";
+  else mood.textContent = "Calm. No open token balance.";
+}
+
+function tickerItems() {
+  const items = [];
+  for (const change of state.balanceChanges) {
+    items.push(
+      "Balance changed · " +
+        fmtSol(solFromLamports(change.from)) +
+        " SOL → " +
+        fmtSol(solFromLamports(change.to)) +
+        " SOL"
+    );
+  }
+  if (Array.isArray(state.walletSigs)) {
+    if (!state.walletSigs.length) items.push("Wallet · no signatures returned");
+    for (const sig of state.walletSigs) {
+      const when = Number.isFinite(sig.blockTime)
+        ? formatEt(new Date(sig.blockTime * 1000), { zone: true })
+        : "time unavailable";
+      const status = sig.err ? "failed" : sig.confirmationStatus || "ok";
+      items.push("Wallet · " + when + " · " + status + " · " + shortKey(sig.signature, 4, 4));
+    }
+  } else if (state.phase !== "loading") {
+    items.push("Wallet signatures unavailable");
+  }
+  if (Array.isArray(state.targetSigs)) {
+    const sig = state.targetSigs[0];
+    if (!sig) items.push("Copy target · no signatures returned");
+    else if (Number.isFinite(sig.blockTime)) {
+      items.push("Copy target last seen · " + formatEt(new Date(sig.blockTime * 1000), { zone: true }));
+    } else {
+      items.push("Copy target last seen · time unavailable");
+    }
+  }
+  const now = new Date();
+  for (const agent of AGENTS) {
+    const phase = botPhase(agent, now);
+    if (phase.running) {
+      items.push("Schedule · " + agent.name + " · RUNNING · fired " + formatEt(phase.previous, { seconds: false, zone: true }));
+    } else {
+      items.push("Schedule · " + agent.name + " · STANDBY · next " + formatEt(phase.next, { seconds: false, zone: true }));
+    }
+  }
+  if (!items.length) items.push("Waiting on wallet signatures and the copy target");
+  return items;
+}
+
+function renderTicker() {
+  const track = $("ticker-track");
+  const items = tickerItems();
+  const key = items.join("\n");
+  if (track.dataset.key === key) return;
+  track.dataset.key = key;
+  track.replaceChildren();
+  for (const text of items.concat(items)) {
+    const span = document.createElement("span");
+    span.textContent = text;
+    track.append(span);
+  }
+  const seconds = Math.max(28, Math.round(items.join("  ").length * 0.11));
+  track.style.animationDuration = seconds + "s";
 }
 
 function renderPositions() {
@@ -946,9 +1049,11 @@ function renderLog() {
 function render() {
   renderStatus();
   renderMetrics();
+  renderMascot();
+  renderTicker();
+  renderFleet();
   renderSpark();
   renderTarget();
-  renderAgents();
   renderPositions();
   renderRisk();
   renderLog();
@@ -1020,7 +1125,9 @@ function schedule(ms) {
 
 function tick() {
   renderMetrics();
-  renderAgents();
+  renderFleet();
+  renderMascot();
+  renderTicker();
   renderStatus();
   const age = $("target-age");
   if (age && state.targetSigs?.[0]?.blockTime) {

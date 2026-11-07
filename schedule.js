@@ -2,55 +2,57 @@
 
 export const TZ = "America/New_York";
 
+export const RUN_WINDOW_MS = 2 * 60 * 1000;
+
 export const AGENTS = [
   {
     id: "scanner",
-    name: "Scanner",
-    schedule: "Every 30 min · :00 and :30 ET",
+    name: "Pump.fun scanner",
+    cron: "0,30 * * * *",
+    schedule: "Every 30 min · :00 and :30",
     kind: "interval",
     step: 30,
   },
   {
     id: "copy",
-    name: "Copy alerts",
-    schedule: "Every 30 min · :00 and :30 ET",
+    name: "Copy trade alerts",
+    cron: "0,30 * * * *",
+    schedule: "Every 30 min · :00 and :30",
     kind: "interval",
     step: 30,
   },
   {
     id: "rug",
     name: "Rug watch",
-    schedule: "Every 10 min · :00 :10 :20 :30 :40 :50 ET",
+    cron: "*/10 * * * *",
+    schedule: "Every 10 min",
     kind: "interval",
     step: 10,
   },
   {
     id: "trend",
     name: "Trend spotter",
-    schedule: "Even hours · 8 AM to 10 PM ET",
+    cron: "0 8-23/2 * * *",
+    schedule: "Even hours · 8 AM–10 PM",
     kind: "trend",
   },
   {
     id: "scout",
     name: "Wallet scout",
-    schedule: "Daily · 8:00 PM ET",
+    cron: "0 20 * * *",
+    schedule: "Daily · 8:00 PM",
     kind: "daily",
     hour: 20,
     minute: 0,
   },
   {
     id: "recap",
-    name: "Recap",
-    schedule: "Daily · 9:00 PM ET",
+    name: "Nightly recap",
+    cron: "0 21 * * *",
+    schedule: "Daily · 9:00 PM",
     kind: "daily",
     hour: 21,
     minute: 0,
-  },
-  {
-    id: "trojan",
-    name: "Trojan executor",
-    schedule: "Always on",
-    kind: "always",
   },
 ];
 
@@ -173,11 +175,68 @@ export function nextTrend(now, timeZone = TZ) {
 }
 
 export function nextAgentRun(agent, now) {
-  if (agent.kind === "always") return null;
   if (agent.kind === "interval") return nextInterval(now, agent.step);
   if (agent.kind === "daily") return nextDaily(now, agent.hour, agent.minute);
   if (agent.kind === "trend") return nextTrend(now);
   return null;
+}
+
+function previousInterval(now, stepMin, timeZone = TZ) {
+  const parts = zonedParts(now, timeZone);
+  const mod = (parts.hour * 60 + parts.minute) % stepMin;
+  if (mod === 0) {
+    return zonedToUtc(parts.year, parts.month, parts.day, parts.hour, parts.minute, 0, timeZone);
+  }
+  return addMinutes(parts, -mod, timeZone);
+}
+
+function previousDaily(now, hour, minute, timeZone = TZ) {
+  const parts = zonedParts(now, timeZone);
+  const today = zonedToUtc(parts.year, parts.month, parts.day, hour, minute, 0, timeZone);
+  if (now.getTime() >= today.getTime()) return today;
+  const yesterday = addDays(parts, -1);
+  return zonedToUtc(yesterday.year, yesterday.month, yesterday.day, hour, minute, 0, timeZone);
+}
+
+function previousTrend(now, timeZone = TZ) {
+  const hours = [8, 10, 12, 14, 16, 18, 20, 22];
+  const parts = zonedParts(now, timeZone);
+  let last = null;
+  for (const hour of hours) {
+    const candidate = zonedToUtc(parts.year, parts.month, parts.day, hour, 0, 0, timeZone);
+    if (candidate.getTime() <= now.getTime()) last = candidate;
+  }
+  if (last) return last;
+  const yesterday = addDays(parts, -1);
+  return zonedToUtc(yesterday.year, yesterday.month, yesterday.day, 22, 0, 0, timeZone);
+}
+
+export function previousRun(agent, now) {
+  if (agent.kind === "interval") return previousInterval(now, agent.step);
+  if (agent.kind === "daily") return previousDaily(now, agent.hour, agent.minute);
+  if (agent.kind === "trend") return previousTrend(now);
+  return null;
+}
+
+export function upcomingRun(agent, now) {
+  const next = nextAgentRun(agent, now);
+  if (!next) return null;
+  if (next.getTime() > now.getTime()) return next;
+  return nextAgentRun(agent, new Date(next.getTime() + 1000));
+}
+
+export function botPhase(agent, now) {
+  const previous = previousRun(agent, now);
+  const next = upcomingRun(agent, now);
+  const elapsed = previous ? now.getTime() - previous.getTime() : Number.POSITIVE_INFINITY;
+  const running = elapsed >= 0 && elapsed < RUN_WINDOW_MS;
+  return {
+    running,
+    previous,
+    next,
+    countdownMs: next ? next.getTime() - now.getTime() : null,
+    windowEnds: previous ? new Date(previous.getTime() + RUN_WINDOW_MS) : null,
+  };
 }
 
 export function formatCountdown(ms) {
@@ -190,7 +249,7 @@ export function formatCountdown(ms) {
   const secs = total % 60;
   const pad = (n) => String(n).padStart(2, "0");
   if (days > 0) return `${days}d ${pad(hours)}h ${pad(mins)}m`;
-  if (hours > 0) return `${hours}h ${pad(mins)}m ${pad(secs)}s`;
+  if (hours > 0) return `${hours}h ${pad(mins)}m`;
   return `${pad(mins)}:${pad(secs)}`;
 }
 

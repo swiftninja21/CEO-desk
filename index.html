@@ -17,42 +17,110 @@
   <link rel="stylesheet" href="./styles.css">
 </head>
 <body>
-  <div class="app">
-    <header class="top">
-      <div class="brand">
-        <div class="mascot is-calm" id="mascot">
-          <svg class="mascot-svg" viewBox="0 0 64 64" aria-hidden="true">
-            <path d="M32 8 V16" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
-            <circle cx="32" cy="6.5" r="2.2" fill="currentColor"/>
-            <rect x="14" y="16" width="36" height="28" rx="10" fill="#07140c" stroke="currentColor" stroke-width="1.7"/>
-            <g class="eyes">
-              <circle class="eye" cx="25" cy="29" r="3"/>
-              <circle class="eye" cx="39" cy="29" r="3"/>
-            </g>
-            <path class="mouth calm" d="M26 38 Q32 41 38 38" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-            <path class="mouth excited" d="M24 36 Q32 46 40 36" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
-          </svg>
-          <span class="sr-only" id="mascot-mood">Calm</span>
-        </div>
-        <div>
-          <h1>CEO Desk</h1>
-          <p class="subhead">Aj · Solana · read only</p>
-        </div>
+  <header class="top hud">
+    <div class="brand">
+      <div class="mascot is-calm" id="mascot">
+        <svg class="mascot-svg" viewBox="0 0 64 64" aria-hidden="true">
+          <path d="M32 8 V16" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+          <circle cx="32" cy="6.5" r="2.2" fill="currentColor"/>
+          <rect x="14" y="16" width="36" height="28" rx="10" fill="#07140c" stroke="currentColor" stroke-width="1.7"/>
+          <g class="eyes">
+            <circle class="eye" cx="25" cy="29" r="3"/>
+            <circle class="eye" cx="39" cy="29" r="3"/>
+          </g>
+          <path class="mouth calm" d="M26 38 Q32 41 38 38" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          <path class="mouth excited" d="M24 36 Q32 46 40 36" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+        </svg>
+        <span class="sr-only" id="mascot-mood">Calm</span>
       </div>
+      <div>
+        <h1>CEO Desk</h1>
+        <p class="subhead">Aj · Solana · read only</p>
+      </div>
+    </div>
+    <div class="hud-actions">
       <div class="live is-wait" id="live-pill">
         <span class="dot" id="live-dot" aria-hidden="true"></span>
         <span id="live-label">LOADING</span>
       </div>
-    </header>
+      <button type="button" class="ghost" id="view-toggle">Desk</button>
+    </div>
+  </header>
+  <p class="status hud-status" id="status" role="status">loading public data</p>
+  <p class="fine hud-note" id="status-note"></p>
 
-    <p class="status" id="status" role="status">loading public data</p>
-    <p class="fine" id="status-note"></p>
-    <p class="clock-line"><span id="clock">—</span></p>
-
-    <div class="ticker" id="ticker">
+  <div id="city-view">
+    <div class="stage">
+      <canvas id="city" aria-label="Isometric city of Aj's bots"></canvas>
+      <div class="city-signs" id="city-signs"></div>
+      <div id="tower-labels"></div>
+      <button type="button" id="vault-label" class="vault-label">
+        <span class="vault-kicker">The Vault · today</span>
+        <strong class="vault-usd">—</strong>
+        <span class="vault-sol">—</span>
+      </button>
+    </div>
+    <div class="ticker city-ticker" id="ticker">
       <div class="ticker-track" id="ticker-track"></div>
     </div>
+  </div>
 
+  <div id="office" class="office" hidden>
+    <div class="office-top">
+      <button type="button" class="ghost" id="office-back">City</button>
+      <div>
+        <h2 id="office-title">Office</h2>
+        <p class="fine" id="office-sub"></p>
+      </div>
+    </div>
+    <p class="wall-neon">THE MONEY NEVER SLEEPS</p>
+    <div class="office-layout">
+      <section class="monitor">
+        <h3>Signal log</h3>
+        <p class="fine">Scheduled lines are marked scheduled. Numbers come from the wallet, Johnson, or the cron.</p>
+        <ol id="office-log"></ol>
+      </section>
+      <section class="monitor">
+        <h3>Session</h3>
+        <canvas id="office-chart" width="320" height="96"></canvas>
+        <p class="fine" id="office-chart-note"></p>
+      </section>
+      <section class="monitor">
+        <h3>Heatmap</h3>
+        <canvas id="office-heat" width="320" height="72"></canvas>
+        <p class="fine" id="office-heat-note"></p>
+      </section>
+      <div class="robot-desk" aria-hidden="true">
+        <svg class="robot" viewBox="0 0 220 170">
+          <rect x="18" y="118" width="184" height="12" rx="2" fill="#d7fff1"/>
+          <rect x="28" y="130" width="10" height="22" fill="#9be7ff"/>
+          <rect x="182" y="130" width="10" height="22" fill="#ff7ad9"/>
+          <g class="arm arm-l">
+            <rect x="58" y="86" width="28" height="8" rx="3" fill="#f4f7fb"/>
+          </g>
+          <g class="arm arm-r">
+            <rect x="134" y="86" width="28" height="8" rx="3" fill="#f4f7fb"/>
+          </g>
+          <rect x="86" y="64" width="48" height="52" rx="8" fill="#f7f9fc"/>
+          <rect x="80" y="28" width="60" height="40" rx="12" fill="#f7f9fc"/>
+          <path d="M84 42 a26 22 0 0 1 52 0" fill="none" stroke="#ff2bd6" stroke-width="4"/>
+          <rect x="72" y="38" width="12" height="18" rx="4" fill="#39f3ff"/>
+          <rect x="136" y="38" width="12" height="18" rx="4" fill="#ff2bd6"/>
+          <g class="eyes">
+            <rect x="96" y="42" width="10" height="7" rx="1" fill="#141821"/>
+            <rect x="116" y="42" width="10" height="7" rx="1" fill="#141821"/>
+          </g>
+          <path d="M100 56 h22" stroke="#141821" stroke-width="1.4" stroke-linecap="round"/>
+        </svg>
+      </div>
+    </div>
+  </div>
+
+  <div id="desk" class="app">
+    <div class="desk-back">
+      <button type="button" class="ghost" id="back-city">City</button>
+    </div>
+    <p class="clock-line"><span id="clock">—</span></p>
     <section class="card fleet" aria-labelledby="fleet-title">
       <div class="card-head">
         <h2 id="fleet-title">Bot fleet</h2>

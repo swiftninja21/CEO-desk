@@ -1,4 +1,5 @@
 import { botAvatar } from "./bots.js";
+import { mountCity } from "./city.js";
 import {
   AGENTS,
   STAKE_AT,
@@ -56,6 +57,10 @@ const state = {
   seenSigs: null,
   freshSigUntil: 0,
   balanceChanges: [],
+  tradeEvents: [],
+  trojanUntil: 0,
+  trojanKind: null,
+  trojanSolText: "",
 };
 
 function loadSpark() {
@@ -538,7 +543,42 @@ function portfolio() {
   return { nativeSol, rows, known, unmarked, tokenUsd, portfolioUsd, pnlSol, pnlUsd };
 }
 
+function tokenMap(rows) {
+  const map = new Map();
+  for (const row of rows) map.set(row.mint, (map.get(row.mint) || 0) + row.amount);
+  return map;
+}
+
+function classifyMove(before, after) {
+  const solDelta = after.nativeSol - before.nativeSol;
+  if (!Number.isFinite(solDelta) || Math.abs(solDelta) < 0.001) return null;
+  const prev = tokenMap(before.rows);
+  const next = tokenMap(after.rows);
+  const mints = new Set([...prev.keys(), ...next.keys()]);
+  let up = 0;
+  let down = 0;
+  for (const mint of mints) {
+    const delta = (next.get(mint) || 0) - (prev.get(mint) || 0);
+    if (Math.abs(delta) < 1e-9) continue;
+    if (delta > 0) up += 1;
+    else down += 1;
+  }
+  if (!up && !down) return null;
+  let kind = "swap";
+  if (up && !down && solDelta < 0) kind = "buy";
+  else if (down && !up && solDelta > 0) kind = "sell";
+  else if (solDelta < 0) kind = "buy";
+  else kind = "sell";
+  return {
+    kind,
+    solFrom: before.nativeSol,
+    solTo: after.nativeSol,
+    tokens: up + down,
+  };
+}
+
 function applyChain(partial) {
+  const before = state.balanceLamports == null ? null : portfolio();
   if (Array.isArray(partial.walletSigs)) {
     const ids = partial.walletSigs.map((sig) => sig.signature).filter(Boolean);
     if (state.seenSigs) {
@@ -567,6 +607,17 @@ function applyChain(partial) {
   state.t22 = partial.t22;
   state.chainErrors = partial.errors;
   state.updatedAt = Date.now();
+  const after = portfolio();
+  if (before && before.known && after.known && before.nativeSol != null && after.nativeSol != null) {
+    const move = classifyMove(before, after);
+    if (move) {
+      state.tradeEvents.unshift({ t: Date.now(), ...move });
+      state.tradeEvents = state.tradeEvents.slice(0, 6);
+      state.trojanUntil = Date.now() + 2 * 60 * 1000;
+      state.trojanKind = move.kind;
+      state.trojanSolText = fmtSol(move.solFrom) + " → " + fmtSol(move.solTo) + " SOL";
+    }
+  }
 }
 
 function renderStatus() {
@@ -1058,6 +1109,109 @@ function renderLog() {
   }
 }
 
+function deskSnapshot() {
+  const now = new Date();
+  const book = portfolio();
+  const agents = AGENTS.map((agent) => {
+    const phase = botPhase(agent, now);
+    return {
+      id: agent.id,
+      name: agent.name,
+      running: phase.running,
+      countText: phase.running ? "now" : formatCountdown(phase.countdownMs),
+      when: phase.next ? formatEt(phase.next, { seconds: false, zone: true }) : "",
+      cron: agent.cron,
+    };
+  });
+  const lines = [];
+  for (const agent of agents) {
+    const meta = AGENTS.find((item) => item.id === agent.id);
+    lines.push({
+      agentId: agent.id,
+      tag: "Scheduled",
+      text: agent.running
+        ? meta.name + " · RUNNING · scheduled window"
+        : meta.name + " · STANDBY · next " + agent.when,
+    });
+  }
+  if (Array.isArray(state.walletSigs)) {
+    for (const sig of state.walletSigs.slice(0, 8)) {
+      const when = Number.isFinite(sig.blockTime)
+        ? formatEt(new Date(sig.blockTime * 1000), { zone: true })
+        : "time unavailable";
+      lines.push({
+        agentId: "all",
+        tag: sig.err ? "Failed" : "Wallet",
+        text: when + " · " + (sig.err ? "failed" : sig.confirmationStatus || "ok") + " · " + shortKey(sig.signature, 4, 4),
+      });
+    }
+  }
+  const seen = latestTargetSuccess(state.targetSigs);
+  if (Array.isArray(state.targetSigs)) {
+    if (seen && Number.isFinite(seen.blockTime)) {
+      lines.push({
+        agentId: "trojan",
+        tag: "Johnson",
+        text: "Last successful signature · " + formatEt(new Date(seen.blockTime * 1000), { zone: true }),
+      });
+    } else if (state.targetSigs.length) {
+      lines.push({
+        agentId: "trojan",
+        tag: "Johnson",
+        text: "No successful signature in the newest " + state.targetSigs.length,
+      });
+    } else {
+      lines.push({ agentId: "trojan", tag: "Johnson", text: "No signatures returned" });
+    }
+  }
+  for (const change of state.balanceChanges) {
+    lines.push({
+      agentId: "all",
+      tag: "Balance",
+      text: fmtSol(solFromLamports(change.from)) + " SOL → " + fmtSol(solFromLamports(change.to)) + " SOL",
+    });
+  }
+  for (const trade of state.tradeEvents) {
+    lines.push({
+      agentId: "trojan",
+      tag: "Balances",
+      text:
+        trade.kind +
+        "-like · " +
+        fmtSol(trade.solFrom) +
+        " → " +
+        fmtSol(trade.solTo) +
+        " SOL · " +
+        trade.tokens +
+        " token balance" +
+        (trade.tokens === 1 ? "" : "s") +
+        " changed",
+    });
+  }
+  if (book.nativeSol != null) {
+    lines.push({
+      agentId: "all",
+      tag: "Balance",
+      text: "Native " + fmtSol(book.nativeSol) + " SOL" + (book.portfolioUsd == null ? "" : " · " + fmtUsd(book.portfolioUsd)),
+    });
+  }
+  return {
+    vaultUsd: book.pnlUsd == null ? "—" : fmtPnlUsd(book.pnlUsd),
+    vaultSol: book.pnlSol == null ? "P&L waiting" : fmtPnlSol(book.pnlSol),
+    vaultDir: book.pnlUsd,
+    agents,
+    trojan: {
+      lit: Date.now() < state.trojanUntil,
+      kind: state.trojanKind,
+      solText: state.trojanSolText,
+    },
+    lines,
+    spark: state.spark,
+  };
+}
+
+let city = null;
+
 function render() {
   renderStatus();
   renderMetrics();
@@ -1069,6 +1223,7 @@ function render() {
   renderPositions();
   renderRisk();
   renderLog();
+  if (city) city.sync();
 }
 
 async function poll() {
@@ -1146,6 +1301,7 @@ function tick() {
   if (age && seen?.blockTime) {
     age.textContent = fmtAgo(Date.now() - seen.blockTime * 1000);
   }
+  if (city) city.sync();
 }
 
 function wireCopy() {
@@ -1175,6 +1331,7 @@ function boot() {
   $("stake-note").textContent =
     "Recorded stake 1.106 SOL · $99.10 · " + formatEt(STAKE_AT, { zone: true }) + ". Implied stake price " + fmtUsd(STAKE_USD / STAKE_SOL) + " per SOL.";
   wireCopy();
+  city = mountCity(deskSnapshot);
   render();
   poll();
   setInterval(tick, 1000);

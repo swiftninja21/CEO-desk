@@ -11,7 +11,9 @@ import {
 } from "./schedule.js";
 
 const WALLET = "7MDqGWcdgesJHxWs2a1YSaKobcqWe7yU5kjz4XNBKPMa";
-const TARGET = "C2P1Zap9Qb6ovaXiUPH4cVbJCDUjbmhzwngcDFTgFp8v";
+const TARGET = "J9TYAsWWidbrcZybmLSfrLzryANf4CgJBLdvwdGuC8MB";
+const TARGET_NAME = "Johnson";
+const TARGET_SIG_LIMIT = 20;
 const SPL = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
 const TOKEN_2022 = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb";
 const WSOL = "So11111111111111111111111111111111111111112";
@@ -281,7 +283,7 @@ async function getSignatures(endpoint) {
       jsonrpc: "2.0",
       id: "t",
       method: "getSignaturesForAddress",
-      params: [TARGET, { limit: 1, commitment: "confirmed" }],
+      params: [TARGET, { limit: TARGET_SIG_LIMIT, commitment: "confirmed" }],
     },
   ];
   try {
@@ -303,7 +305,7 @@ async function getSignatures(endpoint) {
   } catch (err) {
     if (err instanceof RpcError && (err.status === 403 || err.status === 429 || err.status === 0)) throw err;
     const wallet = await rpcCall(endpoint, "getSignaturesForAddress", [WALLET, { limit: 12, commitment: "confirmed" }]);
-    const target = await rpcCall(endpoint, "getSignaturesForAddress", [TARGET, { limit: 1, commitment: "confirmed" }]);
+    const target = await rpcCall(endpoint, "getSignaturesForAddress", [TARGET, { limit: TARGET_SIG_LIMIT, commitment: "confirmed" }]);
     return { wallet, target };
   }
 }
@@ -713,15 +715,24 @@ function renderSpark() {
   ctx.fill();
 }
 
+function latestTargetSuccess(sigs) {
+  if (!Array.isArray(sigs)) return null;
+  return sigs.find((sig) => sig && sig.err == null) || null;
+}
+
 function renderTarget() {
   const host = $("target-body");
   host.replaceChildren();
   if (state.targetSigs == null) {
-    host.append(line(state.chainErrors.length ? "Last activity unavailable." : "Loading last signature…"));
+    host.append(line(state.chainErrors.length ? "Last seen unavailable." : "Loading last successful signature…"));
     if (state.chainErrors.length) host.append(line(state.chainErrors.join(" ")));
     return;
   }
-  const sig = state.targetSigs[0];
+  const sig = latestTargetSuccess(state.targetSigs);
+  if (!sig && state.targetSigs.length) {
+    host.append(line("No successful signature in the newest " + state.targetSigs.length + ". Failed transfers are not counted as last seen."));
+    return;
+  }
   if (!sig) {
     const note =
       state.endpoint?.id === "publicnode"
@@ -753,7 +764,7 @@ function renderTarget() {
       row.target = "_blank";
       row.rel = "noopener noreferrer";
     }
-    row.textContent = shortKey(sig.signature, 6, 6) + (sig.err ? " · failed" : " · confirmed");
+    row.textContent = shortKey(sig.signature, 6, 6) + " · " + (sig.confirmationStatus || "ok");
     host.append(row);
   }
 }
@@ -844,12 +855,13 @@ function tickerItems() {
     items.push("Wallet signatures unavailable");
   }
   if (Array.isArray(state.targetSigs)) {
-    const sig = state.targetSigs[0];
-    if (!sig) items.push("Copy target · no signatures returned");
+    const sig = latestTargetSuccess(state.targetSigs);
+    if (!sig && !state.targetSigs.length) items.push(TARGET_NAME + " · no signatures returned");
+    else if (!sig) items.push(TARGET_NAME + " · no successful signature in the newest " + state.targetSigs.length);
     else if (Number.isFinite(sig.blockTime)) {
-      items.push("Copy target last seen · " + formatEt(new Date(sig.blockTime * 1000), { zone: true }));
+      items.push(TARGET_NAME + " last seen · " + formatEt(new Date(sig.blockTime * 1000), { zone: true }));
     } else {
-      items.push("Copy target last seen · time unavailable");
+      items.push(TARGET_NAME + " last seen · time unavailable");
     }
   }
   const now = new Date();
@@ -1130,8 +1142,9 @@ function tick() {
   renderTicker();
   renderStatus();
   const age = $("target-age");
-  if (age && state.targetSigs?.[0]?.blockTime) {
-    age.textContent = fmtAgo(Date.now() - state.targetSigs[0].blockTime * 1000);
+  const seen = latestTargetSuccess(state.targetSigs);
+  if (age && seen?.blockTime) {
+    age.textContent = fmtAgo(Date.now() - seen.blockTime * 1000);
   }
 }
 
@@ -1154,7 +1167,11 @@ function wireCopy() {
 
 function boot() {
   $("wallet-addr").textContent = WALLET;
+  $("target-title").textContent = TARGET_NAME;
   $("target-addr").textContent = TARGET;
+  $("target-addr").href = "https://solscan.io/account/" + TARGET;
+  const copyBtn = document.querySelector("[data-copy-target]");
+  if (copyBtn) copyBtn.setAttribute("data-copy", TARGET);
   $("stake-note").textContent =
     "Recorded stake 1.106 SOL · $99.10 · " + formatEt(STAKE_AT, { zone: true }) + ". Implied stake price " + fmtUsd(STAKE_USD / STAKE_SOL) + " per SOL.";
   wireCopy();

@@ -743,29 +743,40 @@ body.show-desk #desk { display: block; }
 }
 .vault-usd { display: block; margin-top: 3px; font-size: 20px; color: var(--beam, #3dff9a); }
 .vault-sol { display: block; margin-top: 2px; color: var(--muted); font-size: 11px; }
-.vault-line {
+.vault-block + .vault-block {
+  margin-top: 8px;
+  padding-top: 7px;
+  border-top: 1px solid rgba(166, 255, 206, 0.16);
+}
+.vault-balance-usd,
+.vault-all-usd {
   display: block;
-  margin-top: 0;
-  color: var(--text);
-  font-size: 9px;
-  font-weight: 500;
-  line-height: 1.05;
-  letter-spacing: 0;
+  margin-top: 3px;
+  font-size: 20px;
+  letter-spacing: -0.03em;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
-#vault-balance { margin-top: 3px; }
-.vault-tag {
-  color: var(--muted);
-  font-size: 8px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+.vault-balance-sol,
+.vault-all-sol {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
-#vault-all.pos,
-#vault-all.pos .vault-tag { color: var(--green); }
-#vault-all.neg,
-#vault-all.neg .vault-tag { color: var(--red); }
+#vault-balance .vault-kicker,
+#vault-balance .vault-balance-usd { color: #3de4ff; }
+#vault-balance .vault-balance-sol { color: rgba(61, 228, 255, 0.78); }
+#vault-all .vault-kicker,
+#vault-all .vault-all-usd,
+#vault-all .vault-all-sol { color: var(--muted); }
+#vault-all.pos .vault-kicker,
+#vault-all.pos .vault-all-usd,
+#vault-all.pos .vault-all-sol { color: var(--green); }
+#vault-all.neg .vault-kicker,
+#vault-all.neg .vault-all-usd,
+#vault-all.neg .vault-all-sol { color: var(--red); }
 .city-ticker { position: absolute; left: 10px; right: 10px; bottom: 8px; z-index: 5; margin: 0; }
 
 .neon-float {

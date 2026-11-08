@@ -1130,14 +1130,20 @@ function vaultSpot(book) {
   return { sol, usd, allSol, allUsd };
 }
 
-function fmtVaultBalance(spot) {
-  if (spot.sol == null) return "—";
-  return spot.sol.toFixed(4) + " SOL · " + (spot.usd == null ? "—" : fmtUsd(spot.usd));
+function fmtVaultBalanceUsd(spot) {
+  return spot.usd == null ? "—" : fmtUsd(spot.usd);
 }
 
-function fmtVaultAll(spot) {
-  if (spot.allSol == null) return "—";
-  return fmtPnlSol(spot.allSol) + " · " + (spot.allUsd == null ? "—" : fmtPnlUsd(spot.allUsd));
+function fmtVaultBalanceSol(spot) {
+  return spot.sol == null ? "—" : spot.sol.toFixed(4) + " SOL";
+}
+
+function fmtVaultAllUsd(spot) {
+  return spot.allUsd == null ? "—" : fmtPnlUsd(spot.allUsd);
+}
+
+function fmtVaultAllSol(spot) {
+  return spot.allSol == null ? "—" : fmtPnlSol(spot.allSol);
 }
 
 function deskSnapshot() {
@@ -1231,8 +1237,10 @@ function deskSnapshot() {
     vaultUsd: book.pnlUsd == null ? "—" : fmtPnlUsd(book.pnlUsd),
     vaultSol: book.pnlSol == null ? "P&L waiting" : fmtPnlSol(book.pnlSol),
     vaultDir: book.pnlUsd,
-    vaultBalance: fmtVaultBalance(spot),
-    vaultAll: fmtVaultAll(spot),
+    vaultBalanceUsd: fmtVaultBalanceUsd(spot),
+    vaultBalanceSol: fmtVaultBalanceSol(spot),
+    vaultAllUsd: fmtVaultAllUsd(spot),
+    vaultAllSol: fmtVaultAllSol(spot),
     vaultAllDir: spot.allUsd != null ? spot.allUsd : spot.allSol,
     agents,
     trojan: {

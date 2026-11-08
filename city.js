@@ -137,6 +137,7 @@ export function mountCity(getSnapshot) {
     for (const tower of ordered) drawTower(tower, now);
     drawVault(now);
     placeLabels(true);
+    placeVault();
   }
 
   function drawPlatform(now) {
@@ -295,8 +296,55 @@ export function mountCity(getSnapshot) {
     ctx.stroke();
     ctx.restore();
     vaultEl.style.setProperty("--beam", color);
+  }
+
+  let vaultPlaceKey = "";
+
+  function placeVault() {
     const lip = project(0.15, 2.05, 28);
-    vaultEl.style.transform = `translate(${lip.x}px, ${lip.y}px) translate(-50%, -100%)`;
+    const w = vaultEl.offsetWidth || 160;
+    const h = vaultEl.offsetHeight || 80;
+    const key = [view.w, view.h, w, h, Math.round(lip.x), Math.round(lip.y)].join(":");
+    if (key === vaultPlaceKey) return;
+    const margin = 8;
+    const stageRect = stage.getBoundingClientRect();
+    const obstacles = [...buttons.values()].map((btn) => {
+      const r = btn.getBoundingClientRect();
+      return {
+        l: r.left - stageRect.left - margin,
+        t: r.top - stageRect.top - margin,
+        r: r.right - stageRect.left + margin,
+        b: r.bottom - stageRect.top + margin,
+      };
+    });
+    const hits = (l, t) => obstacles.some((o) => l < o.r && l + w > o.l && t < o.b && t + h > o.t);
+    const clamp = (l, t) => ({
+      l: Math.max(6, Math.min(Math.max(6, view.w - w - 6), l)),
+      t: Math.max(6, Math.min(Math.max(6, view.h - h - 6), t)),
+    });
+    const prefer = clamp(lip.x - w / 2, lip.y - h);
+    let chosen = prefer;
+    if (hits(prefer.l, prefer.t)) {
+      let best = null;
+      for (let dx = 0; dx <= view.w; dx += 8) {
+        const xDirs = dx === 0 ? [0] : [1, -1];
+        for (const sx of xDirs) {
+          for (let dy = 0; dy <= view.h; dy += 8) {
+            const yDirs = dy === 0 ? [0] : [-1, 1];
+            for (const sy of yDirs) {
+              const spot = clamp(prefer.l + sx * dx, prefer.t + sy * dy);
+              if (hits(spot.l, spot.t)) continue;
+              const score = Math.abs(spot.l - prefer.l) + Math.abs(spot.t - prefer.t) * 0.7;
+              if (!best || score < best.score) best = { l: spot.l, t: spot.t, score };
+            }
+          }
+        }
+        if (best && best.score <= dx + 8) break;
+      }
+      if (best) chosen = best;
+    }
+    vaultEl.style.transform = `translate(${Math.round(chosen.l)}px, ${Math.round(chosen.t)}px)`;
+    vaultPlaceKey = key;
   }
 
   function placeLabels(withLines) {
@@ -336,15 +384,17 @@ export function mountCity(getSnapshot) {
   function syncText() {
     snap = getSnapshot();
     if (vaultEl) {
-      const usd = vaultEl.querySelector(".vault-usd");
-      const sol = vaultEl.querySelector(".vault-sol");
-      if (usd && usd.textContent !== snap.vaultUsd) usd.textContent = snap.vaultUsd;
-      if (sol && sol.textContent !== snap.vaultSol) sol.textContent = snap.vaultSol;
-      const bal = vaultEl.querySelector(".vault-balance-val");
-      const all = vaultEl.querySelector(".vault-all-val");
+      const write = (sel, text) => {
+        const node = vaultEl.querySelector(sel);
+        if (node && text != null && node.textContent !== text) node.textContent = text;
+      };
+      write(".vault-usd", snap.vaultUsd);
+      write(".vault-sol", snap.vaultSol);
+      write(".vault-balance-usd", snap.vaultBalanceUsd);
+      write(".vault-balance-sol", snap.vaultBalanceSol);
+      write(".vault-all-usd", snap.vaultAllUsd);
+      write(".vault-all-sol", snap.vaultAllSol);
       const allLine = vaultEl.querySelector("#vault-all");
-      if (bal && bal.textContent !== snap.vaultBalance) bal.textContent = snap.vaultBalance;
-      if (all && all.textContent !== snap.vaultAll) all.textContent = snap.vaultAll;
       if (allLine) {
         const dir = snap.vaultAllDir;
         allLine.classList.toggle("pos", typeof dir === "number" && dir > 0);
@@ -352,6 +402,7 @@ export function mountCity(getSnapshot) {
       }
     }
     placeLabels(false);
+    placeVault();
     if (officeId) paintOffice();
     if (reducedMotion.matches) paint(0);
   }

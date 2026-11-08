@@ -55,11 +55,21 @@
       <div class="city-signs" id="city-signs"></div>
       <div id="tower-labels"></div>
       <button type="button" id="vault-label" class="vault-label">
-        <span class="vault-kicker">The Vault · today</span>
-        <strong class="vault-usd">—</strong>
-        <span class="vault-sol">—</span>
-        <span class="vault-line" id="vault-balance"><span class="vault-tag">Balance</span> <span class="vault-balance-val">—</span></span>
-        <span class="vault-line" id="vault-all"><span class="vault-tag">All-time</span> <span class="vault-all-val">—</span></span>
+        <span class="vault-block" id="vault-today">
+          <span class="vault-kicker">The Vault · today</span>
+          <strong class="vault-usd">—</strong>
+          <span class="vault-sol">—</span>
+        </span>
+        <span class="vault-block" id="vault-balance">
+          <span class="vault-kicker">Balance</span>
+          <strong class="vault-balance-usd">—</strong>
+          <span class="vault-balance-sol">—</span>
+        </span>
+        <span class="vault-block" id="vault-all">
+          <span class="vault-kicker">All-time</span>
+          <strong class="vault-all-usd">—</strong>
+          <span class="vault-all-sol">—</span>
+        </span>
       </button>
     </div>
     <div class="ticker city-ticker" id="ticker">

@@ -547,9 +547,7 @@ h1 {
 .agent-count.due { color: var(--green); }
 
 .pos-row {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 2px 10px;
+  display: block;
   padding: 10px 0;
   border-top: 1px solid var(--line);
 }
@@ -558,14 +556,38 @@ h1 {
 
 .pos-name { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .pos-name strong { font-size: 14px; }
-.pos-name span, .pos-meta, .pos-links {
+.pos-name span, .pos-links, .pos-note {
   color: var(--muted);
   font-size: 11px;
 }
 
-.pos-amt, .pos-meta { text-align: right; font-variant-numeric: tabular-nums; }
-.pos-meta { display: flex; flex-direction: column; gap: 2px; }
-.pos-links { grid-column: 1 / -1; display: flex; gap: 10px; flex-wrap: wrap; }
+.pos-facts { margin: 8px 0 0; }
+.pos-facts div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 5px 0;
+  border-top: 1px solid var(--line);
+  font-size: 12px;
+}
+.pos-facts dt {
+  color: var(--dim);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-size: 10px;
+  flex: none;
+}
+.pos-facts dd {
+  margin: 0;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.pos-note { margin: 6px 0 0; line-height: 1.4; }
+.pos-links { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 8px; }
+
+.history { margin: 0 0 12px; }
+.history p { margin: 6px 0 0; font-size: 12px; line-height: 1.45; }
 
 .rules { margin: 0; }
 .rules div {

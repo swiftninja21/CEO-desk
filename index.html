@@ -89,7 +89,7 @@
     <div class="office-layout">
       <section class="monitor">
         <h3>Signal log</h3>
-        <p class="fine">Scheduled lines are marked scheduled. Numbers come from the wallet, Johnson, or the cron.</p>
+        <p class="fine">Scheduled lines are marked scheduled. Numbers come from the copying wallet, Killua, or the cron.</p>
         <ol id="office-log"></ol>
       </section>
       <section class="monitor">
@@ -148,7 +148,7 @@
         <p class="sub" id="start-usd">$99.10</p>
       </article>
       <article class="metric">
-        <h2>Balance</h2>
+        <h2>Cash</h2>
         <p class="num" id="bal-sol">—</p>
         <p class="sub" id="bal-usd">waiting for RPC</p>
       </article>
@@ -176,21 +176,21 @@
 
     <section class="card" aria-labelledby="wallet-title">
       <div class="card-head">
-        <h2 id="wallet-title">Wallet</h2>
-        <button type="button" class="ghost" data-copy="7MDqGWcdgesJHxWs2a1YSaKobcqWe7yU5kjz4XNBKPMa">copy</button>
+        <h2 id="wallet-title">W1</h2>
+        <button type="button" class="ghost" data-copy-wallet data-copy="7MDqGWcdgesJHxWs2a1YSaKobcqWe7yU5kjz4XNBKPMa">copy</button>
       </div>
+      <p class="fine">Copying wallet</p>
       <a class="addr" id="wallet-addr" href="https://solscan.io/account/7MDqGWcdgesJHxWs2a1YSaKobcqWe7yU5kjz4XNBKPMa" target="_blank" rel="noopener noreferrer">7MDqGWcdgesJHxWs2a1YSaKobcqWe7yU5kjz4XNBKPMa</a>
     </section>
 
     <section class="card" aria-labelledby="target-title">
       <div class="card-head">
-        <h2 id="target-title">Johnson</h2>
-        <button type="button" class="ghost" data-copy-target data-copy="J9TYAsWWidbrcZybmLSfrLzryANf4CgJBLdvwdGuC8MB">copy</button>
+        <h2 id="target-title">Killua</h2>
+        <button type="button" class="ghost" data-copy-target data-copy="95TWoKkvv2z85EXBzd2z6NwbxH2f54AvwuCA9x3NoKep">copy</button>
       </div>
       <p class="fine">Copy target</p>
-      <a class="addr" id="target-addr" href="https://solscan.io/account/J9TYAsWWidbrcZybmLSfrLzryANf4CgJBLdvwdGuC8MB" target="_blank" rel="noopener noreferrer">J9TYAsWWidbrcZybmLSfrLzryANf4CgJBLdvwdGuC8MB</a>
-      <p class="fine">Backup · Doji</p>
-      <a class="addr" href="https://solscan.io/account/5ZuV8eqkvzYFVEKbLvGBdexL2tFv7E5BCd2HZpjqbdg" target="_blank" rel="noopener noreferrer">5ZuV8eqkvzYFVEKbLvGBdexL2tFv7E5BCd2HZpjqbdg</a>
+      <a class="addr" id="target-addr" href="https://solscan.io/account/95TWoKkvv2z85EXBzd2z6NwbxH2f54AvwuCA9x3NoKep" target="_blank" rel="noopener noreferrer">95TWoKkvv2z85EXBzd2z6NwbxH2f54AvwuCA9x3NoKep</a>
+      <p class="fine">Backup · none</p>
       <div id="target-body"><p class="muted">Loading last successful signature…</p></div>
     </section>
 
@@ -205,26 +205,28 @@
       <div class="card-head">
         <h2 id="risk-title">Risk</h2>
       </div>
-      <p class="fine">Effective Nov 7, 2026 · 3:36 PM ET</p>
+      <p class="fine" id="risk-effective">Effective Nov 8, 2026 · ~11:52 AM ET</p>
+      <p class="fine">Min liquidity cleared Nov 8, 2026 · ~2:26 PM ET. Max open and the day stop are personal rules. Trojan does not enforce them.</p>
       <dl class="rules">
-        <div><dt>Target</dt><dd>Johnson</dd></div>
-        <div><dt>Target wallet</dt><dd>J9TYAsWWidbrcZybmLSfrLzryANf4CgJBLdvwdGuC8MB</dd></div>
-        <div><dt>Backup</dt><dd>Doji</dd></div>
-        <div><dt>Backup wallet</dt><dd>5ZuV8eqkvzYFVEKbLvGBdexL2tFv7E5BCd2HZpjqbdg</dd></div>
+        <div><dt>Target</dt><dd id="risk-target">Killua</dd></div>
+        <div><dt>Target wallet</dt><dd id="risk-target-wallet">95TWoKkvv2z85EXBzd2z6NwbxH2f54AvwuCA9x3NoKep</dd></div>
+        <div><dt>Backup</dt><dd>None</dd></div>
+        <div><dt>Copy wallet</dt><dd>W1 · 7MDqGWcdgesJHxWs2a1YSaKobcqWe7yU5kjz4XNBKPMa</dd></div>
         <div><dt>Buy</dt><dd>0.1 SOL fixed</dd></div>
         <div><dt>Priority fee</dt><dd>0.001</dd></div>
         <div><dt>Bribe</dt><dd>0.0005</dd></div>
         <div><dt>Slippage</dt><dd>15%</dd></div>
         <div><dt>MEV</dt><dd>On</dd></div>
-        <div><dt>Copy sell</dt><dd>On · when Johnson sells</dd></div>
+        <div><dt>Copy sell</dt><dd id="risk-copy-sell">On · when Killua sells</dd></div>
         <div><dt>Take profit</dt><dd>Sell 50% at +100%</dd></div>
         <div><dt>Stop loss</dt><dd>Sell 100% at −30%</dd></div>
-        <div><dt>Min liquidity</dt><dd>$20,000</dd></div>
+        <div><dt>Min liquidity</dt><dd>None</dd></div>
+        <div><dt>Market cap</dt><dd>None</dd></div>
         <div><dt>Max spend</dt><dd>0.1 SOL</dd></div>
-        <div><dt>Launchpads</dt><dd>Excluded</dd></div>
+        <div><dt>Launchpads</dt><dd>Allowed</dd></div>
         <div><dt>Duplicate buys</dt><dd>Prevented</dd></div>
-        <div><dt>Max open</dt><dd>2</dd></div>
-        <div><dt>Day stop</dt><dd>After −$10</dd></div>
+        <div><dt>Max open</dt><dd>2 · personal rule</dd></div>
+        <div><dt>Day stop</dt><dd>After −$10 · personal rule</dd></div>
       </dl>
       <div class="checks" id="checks"></div>
     </section>
@@ -233,12 +235,20 @@
       <div class="card-head">
         <h2 id="log-title">Log</h2>
       </div>
+      <div class="history">
+        <p class="fine">History</p>
+        <p>Nov 7, 2026 · 3:36 PM ET · Copy target was Johnson, J9TYAsWWidbrcZybmLSfrLzryANf4CgJBLdvwdGuC8MB, with backup Doji, 5ZuV8eqkvzYFVEKbLvGBdexL2tFv7E5BCd2HZpjqbdg.</p>
+        <p>Nov 8, 2026 · ~11:52 AM ET · Switched the copy target to Killua. Johnson is no longer the target. Backup is none.</p>
+        <p>Nov 8, 2026 · ~2:26 PM ET · Min liquidity cleared. It had been $20,000.</p>
+        <p>Nov 8, 2026 · 3:41:27 PM ET · Bought 9,654.832242 PUSSY for 0.1 SOL. Mint FZxHLUGiGchY5uvvoeqh1EKiXTrGdN67WUBhUc1fLoat.</p>
+        <p>Nov 8, 2026 · 4:00:12 PM ET · Sold half of that buy for 0.093487197 SOL net.</p>
+      </div>
       <div class="log" id="log"><p class="muted">Loading recent signatures…</p></div>
     </section>
 
     <footer>
       <p>Read-only public data. Solana JSON-RPC, CoinGecko, DexScreener, and Coinbase. No wallet connection and no private keys.</p>
-      <p>USD P&amp;L is native SOL, plus any priced token balances, minus the $99.10 stake. SOL P&amp;L is that portfolio in SOL minus 1.106, or the native difference when no tokens are held.</p>
+      <p>P/L is cash SOL plus the market value of held tokens, minus the 1.106 SOL starting capital. USD is that SOL result at the current SOL price. Cash alone is not used while a token is held. The $99.10 figure is the stake recorded at 12:08 PM ET on Nov 7, 2026.</p>
     </footer>
   </div>
   <noscript>

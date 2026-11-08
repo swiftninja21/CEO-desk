@@ -430,7 +430,7 @@ export function mountCity(getSnapshot) {
     if (officeId === "trojan") {
       sub.textContent = snap.trojan.lit
         ? "Lit from a real SOL and token balance move. Not a decoded swap."
-        : "Johnson is the copy target. This tower stays dim until Aj's wallet balances move like a buy or sell.";
+        : (snap.targetName || "The copy target") + " is the copy target. This tower stays dim until Aj's wallet balances move like a buy or sell.";
     } else {
       const agent = snap.agents.find((item) => item.id === officeId);
       sub.textContent = agent
@@ -470,9 +470,9 @@ export function mountCity(getSnapshot) {
     const usd = points.filter((p) => Number.isFinite(p.usd));
     const series = usd.length >= 2 ? usd.map((p) => p.usd) : points.map((p) => p.sol).filter((n) => Number.isFinite(n));
     note.textContent = usd.length >= 2
-      ? "Session USD value from polls on this device."
+      ? "Session portfolio USD from polls on this device."
       : series.length >= 2
-        ? "Native SOL from polls on this device. USD needs two priced points."
+        ? "Portfolio SOL from polls on this device. USD needs two priced points."
         : "Not enough polls yet for a line.";
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     const w = canvasEl.clientWidth || 280;

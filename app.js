@@ -1,5 +1,6 @@
 import { botAvatar } from "./bots.js";
 import { mountCity } from "./city.js";
+import { fmtPriceUsd, portfolioMark } from "./marks.js";
 import {
   AGENTS,
   STAKE_AT,
@@ -12,23 +13,38 @@ import {
 } from "./schedule.js";
 
 const WALLET = "7MDqGWcdgesJHxWs2a1YSaKobcqWe7yU5kjz4XNBKPMa";
-const TARGET = "J9TYAsWWidbrcZybmLSfrLzryANf4CgJBLdvwdGuC8MB";
-const TARGET_NAME = "Johnson";
+const WALLET_NAME = "W1";
+const TARGET = "95TWoKkvv2z85EXBzd2z6NwbxH2f54AvwuCA9x3NoKep";
+const TARGET_NAME = "Killua";
 const TARGET_SIG_LIMIT = 20;
 const SPL = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
 const TOKEN_2022 = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb";
 const WSOL = "So11111111111111111111111111111111111111112";
+const PUSSY_MINT = "FZxHLUGiGchY5uvvoeqh1EKiXTrGdN67WUBhUc1fLoat";
+const PUSSY_PAIR = "HcyYBrZVFDDVBLtLxL5C1HDJND1p86BoNA6m7MjBKE3p";
+const PINNED_PAIRS = new Map([[PUSSY_MINT, PUSSY_PAIR]]);
+const RECORDED_FILLS = new Map([
+  [
+    PUSSY_MINT,
+    [
+      "Bought 9,654.832242 for 0.1 SOL · Nov 8, 2026 · 3:41:27 PM ET",
+      "Sold half for 0.093487197 SOL net · Nov 8, 2026 · 4:00:12 PM ET",
+    ],
+  ],
+]);
 
+// publicnode answers getBalance, then returns 403 on getTokenAccountsByOwner.
+// mainnet-beta is the RPC to use. Browsers often get HTTP 403 from it, so
+// vibestation is only the fallback that still returns token accounts.
 const ENDPOINTS = [
   { id: "mainnet-beta", url: "https://api.mainnet-beta.solana.com" },
   { id: "vibestation", url: "https://public.rpc.solanavibestation.com" },
-  { id: "publicnode", url: "https://solana-rpc.publicnode.com" },
 ];
 
 const HEALTHY_MS = 12000;
 const BACKOFF_START_MS = 15000;
 const BACKOFF_MAX_MS = 60000;
-const SPARK_KEY = "ceo-desk.spark.v1";
+const SPARK_KEY = "ceo-desk.spark.v2";
 const BASE58 = /^[1-9A-HJ-NP-Za-km-z]+$/;
 
 const $ = (id) => document.getElementById(id);
@@ -401,30 +417,44 @@ async function loadChain() {
       if (limited || err.status === 0) coolDown(endpoint, pause);
       state.endpointNote =
         endpoint.id === "mainnet-beta" && err.status === 403
-          ? "api.mainnet-beta.solana.com refused the browser (HTTP 403). Using a public CORS endpoint."
+          ? "api.mainnet-beta.solana.com refused the browser (HTTP 403)."
           : `${endpoint.url} failed: ${err.message}`;
     }
   }
   throw lastError || new RpcError("No Solana RPC endpoint responded");
 }
 
+function marketFromPair(pair, mint) {
+  if (!pair || (pair.chainId && pair.chainId !== "solana")) return null;
+  if (pair.baseToken?.address !== mint) return null;
+  const price = Number(pair.priceUsd);
+  const priceNative = Number(pair.priceNative);
+  const quote = pair.quoteToken?.address || "";
+  const quoteSymbol = pair.quoteToken?.symbol || "";
+  const solQuote = quote === WSOL || quoteSymbol === "SOL";
+  const usdOk = Number.isFinite(price);
+  const solOk = solQuote && Number.isFinite(priceNative);
+  if (!usdOk && !solOk) return null;
+  const liq = Number(pair.liquidity?.usd ?? 0);
+  return {
+    price: usdOk ? price : null,
+    priceNative: solOk ? priceNative : null,
+    solQuote,
+    liq: Number.isFinite(liq) ? liq : 0,
+    symbol: pair.baseToken.symbol || "",
+    name: pair.baseToken.name || "",
+    url: safeHttps(pair.url),
+    pair: pair.pairAddress || "",
+  };
+}
+
 function bestMarket(pairs, mint) {
   let best = null;
   for (const pair of pairs || []) {
-    if (pair.chainId !== "solana") continue;
-    if (pair.baseToken?.address !== mint) continue;
-    const price = Number(pair.priceUsd);
-    if (!Number.isFinite(price)) continue;
-    const liq = Number(pair.liquidity?.usd ?? 0);
-    if (!best || liq > best.liq) {
-      best = {
-        price,
-        liq: Number.isFinite(liq) ? liq : 0,
-        symbol: pair.baseToken.symbol || "",
-        name: pair.baseToken.name || "",
-        url: safeHttps(pair.url),
-      };
-    }
+    const market = marketFromPair(pair, mint);
+    if (!market) continue;
+    const rank = (market.solQuote ? 1e15 : 0) + market.liq;
+    if (!best || rank > best.rank) best = { ...market, rank };
   }
   return best;
 }
@@ -474,21 +504,44 @@ async function fetchSolPrice() {
   return { usd: null, source: null, error: errors.join(" · ") };
 }
 
+async function fetchPinnedMarket(mint, pairAddress) {
+  const json = await fetchJson("https://api.dexscreener.com/latest/dex/pairs/solana/" + pairAddress);
+  const pair = json?.pair || (Array.isArray(json?.pairs) ? json.pairs[0] : null);
+  const market = marketFromPair(pair, mint);
+  if (!market) throw new Error("no price");
+  return market;
+}
+
 async function fetchMarkets(mints) {
   if (!mints.length) return { markets: new Map(), error: "" };
-  try {
-    const json = await fetchJson(
-      "https://api.dexscreener.com/latest/dex/tokens/" + mints.slice(0, 30).join(",")
-    );
-    const markets = new Map();
-    for (const mint of mints) {
-      const found = bestMarket(json?.pairs, mint);
-      if (found) markets.set(mint, found);
+  const markets = new Map();
+  const errors = [];
+  await Promise.all(
+    mints.map(async (mint) => {
+      const pinned = PINNED_PAIRS.get(mint);
+      if (!pinned) return;
+      try {
+        markets.set(mint, await fetchPinnedMarket(mint, pinned));
+      } catch (err) {
+        errors.push(shortKey(mint, 4, 4) + " pair: " + (err.message || "failed"));
+      }
+    })
+  );
+  const rest = mints.filter((mint) => !markets.has(mint));
+  if (rest.length) {
+    try {
+      const json = await fetchJson(
+        "https://api.dexscreener.com/latest/dex/tokens/" + rest.slice(0, 30).join(",")
+      );
+      for (const mint of rest) {
+        const found = bestMarket(json?.pairs, mint);
+        if (found) markets.set(mint, found);
+      }
+    } catch (err) {
+      errors.push("DexScreener: " + (err.message || "failed"));
     }
-    return { markets, error: "" };
-  } catch (err) {
-    return { markets: new Map(), error: "DexScreener: " + (err.message || "failed") };
   }
+  return { markets, error: errors.join(" · ") };
 }
 
 function readTokenAccount(row, program) {
@@ -522,25 +575,43 @@ function positionsFromState() {
   return { known: state.spl != null && state.t22 != null, rows };
 }
 
+function tokenSolValue(row, market, solUsd) {
+  if (!market) return null;
+  if (market.priceNative != null) return row.amount * market.priceNative;
+  if (market.price != null && solUsd > 0) return (row.amount * market.price) / solUsd;
+  return null;
+}
+
 function portfolio() {
   const nativeSol = state.balanceLamports == null ? null : solFromLamports(state.balanceLamports);
   const { known, rows } = positionsFromState();
-  let tokenUsd = 0;
+  const price = state.priceUsd;
+  const priceOk = typeof price === "number" && Number.isFinite(price) && price > 0;
+  let tokenSol = 0;
   let unmarked = 0;
   for (const row of rows) {
-    const market = state.markets.get(row.mint);
-    if (!market) unmarked += 1;
-    else tokenUsd += row.amount * market.price;
+    const solValue = tokenSolValue(row, state.markets.get(row.mint), priceOk ? price : null);
+    if (solValue == null) unmarked += 1;
+    else tokenSol += solValue;
   }
-  const price = state.priceUsd;
-  const tokensComplete = known && unmarked === 0;
-  const portfolioUsd =
-    nativeSol != null && price != null && tokensComplete ? nativeSol * price + tokenUsd : null;
-  let pnlSol = null;
-  if (nativeSol != null && known && rows.length === 0) pnlSol = nativeSol - STAKE_SOL;
-  else if (portfolioUsd != null && price > 0) pnlSol = portfolioUsd / price - STAKE_SOL;
-  const pnlUsd = portfolioUsd == null ? null : portfolioUsd - STAKE_USD;
-  return { nativeSol, rows, known, unmarked, tokenUsd, portfolioUsd, pnlSol, pnlUsd };
+  const mark = portfolioMark({
+    cashSol: nativeSol,
+    tokenSol: unmarked === 0 ? tokenSol : null,
+    stakeSol: STAKE_SOL,
+    solUsd: priceOk ? price : null,
+    tokensPriced: known && unmarked === 0 && nativeSol != null,
+  });
+  return {
+    nativeSol,
+    rows,
+    known,
+    unmarked,
+    tokenSol: unmarked === 0 ? tokenSol : null,
+    portfolioSol: mark.portfolioSol,
+    portfolioUsd: mark.portfolioUsd,
+    pnlSol: mark.pnlSol,
+    pnlUsd: mark.pnlUsd,
+  };
 }
 
 function tokenMap(rows) {
@@ -664,14 +735,15 @@ function renderMetrics() {
     setText("bal-sol", state.phase === "reconnecting" ? "unavailable" : "—");
     setText("bal-usd", state.phase === "loading" ? "waiting for RPC" : "balance unavailable");
   } else {
-    paintNumber("bal-sol", fmtSol(book.nativeSol) + " SOL", 0);
-    if (book.portfolioUsd == null) {
-      const why = state.priceUsd == null
-        ? "USD waiting on price"
-        : book.known
-          ? "USD incomplete"
-          : "token accounts not loaded";
-      setText("bal-usd", why);
+    paintNumber("bal-sol", fmtSol(book.nativeSol, 9) + " SOL", 0);
+    if (!book.known) {
+      setText("bal-usd", "portfolio waiting on token accounts");
+    } else if (book.unmarked) {
+      setText("bal-usd", "portfolio waiting on token price");
+    } else if (book.portfolioUsd == null) {
+      setText("bal-usd", book.rows.length ? "portfolio " + fmtSol(book.portfolioSol) + " SOL" : "USD waiting on price");
+    } else if (book.rows.length) {
+      paintNumber("bal-usd", "Portfolio " + fmtSol(book.portfolioSol) + " SOL · " + fmtUsd(book.portfolioUsd), 0);
     } else {
       paintNumber("bal-usd", fmtUsd(book.portfolioUsd), 0);
     }
@@ -683,8 +755,10 @@ function renderMetrics() {
   pnl.classList.add(toneClass(toneSource));
   paintNumber("pnl-usd", book.pnlUsd == null ? "—" : fmtPnlUsd(book.pnlUsd), book.pnlUsd ?? 0);
   if (book.pnlSol != null) setText("pnl-sol", fmtPnlSol(book.pnlSol));
-  else if (book.nativeSol != null && !book.known) setText("pnl-sol", "native " + fmtPnlSol(book.nativeSol - STAKE_SOL));
-  else setText("pnl-sol", book.nativeSol == null ? "—" : "SOL P&L incomplete");
+  else if (book.nativeSol == null) setText("pnl-sol", "—");
+  else if (!book.known) setText("pnl-sol", "waiting on token accounts");
+  else if (book.unmarked) setText("pnl-sol", "waiting on token price");
+  else setText("pnl-sol", "waiting on SOL price");
 
   const elapsedMs = Date.now() - STAKE_AT.getTime();
   setText("elapsed", elapsedMs < 0 ? "00:00:00" : formatElapsed(elapsedMs));
@@ -705,7 +779,7 @@ function renderSpark() {
   } else {
     const first = points[0];
     const last = points[points.length - 1];
-    const label = mode === "usd" ? "Session USD value" : "Native SOL";
+    const label = mode === "usd" ? "Session portfolio USD" : "Portfolio SOL";
     caption.textContent =
       label +
       " · " +
@@ -785,11 +859,7 @@ function renderTarget() {
     return;
   }
   if (!sig) {
-    const note =
-      state.endpoint?.id === "publicnode"
-        ? "This endpoint returned no signatures. Its history index can be incomplete, so this is not proof of inactivity."
-        : "No signatures returned for the copy target.";
-    host.append(line(note));
+    host.append(line("No signatures returned for the copy target."));
     return;
   }
   const when = Number.isFinite(sig.blockTime) ? new Date(sig.blockTime * 1000) : null;
@@ -944,6 +1014,26 @@ function renderTicker() {
   track.style.animationDuration = seconds + "s";
 }
 
+function fmtTokenAmount(text) {
+  const raw = String(text ?? "");
+  const neg = raw.startsWith("-");
+  const body = neg ? raw.slice(1) : raw;
+  const [whole, frac] = body.split(".");
+  if (!/^\d+$/.test(whole || "")) return raw || "—";
+  const grouped = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  return (neg ? "−" : "") + grouped + (frac != null ? "." + frac : "");
+}
+
+function factRow(term, detail) {
+  const wrap = document.createElement("div");
+  const dt = document.createElement("dt");
+  dt.textContent = term;
+  const dd = document.createElement("dd");
+  dd.textContent = detail;
+  wrap.append(dt, dd);
+  return wrap;
+}
+
 function renderPositions() {
   const host = $("positions");
   const book = portfolio();
@@ -961,6 +1051,7 @@ function renderPositions() {
     host.append(line(state.chainErrors.filter((e) => /token/i.test(e)).join(" · ") || "Token accounts incomplete."));
     return;
   }
+  const solUsd = state.priceUsd;
   for (const row of book.rows) {
     const market = state.markets.get(row.mint);
     const card = document.createElement("article");
@@ -972,16 +1063,23 @@ function renderPositions() {
     const sub = document.createElement("span");
     sub.textContent = market?.name || "DexScreener name unavailable";
     name.append(sym, sub);
-    const amt = document.createElement("div");
-    amt.className = "pos-amt";
-    amt.textContent = row.amountText;
-    const meta = document.createElement("div");
-    meta.className = "pos-meta";
-    const price = document.createElement("span");
-    price.textContent = market ? fmtUsd(market.price) : "no market";
-    const value = document.createElement("span");
-    value.textContent = market ? fmtUsd(row.amount * market.price) : "value unavailable";
-    meta.append(price, value);
+    const facts = document.createElement("dl");
+    facts.className = "pos-facts";
+    const symbol = market?.symbol || "tokens";
+    facts.append(factRow("Holding", fmtTokenAmount(row.amountText) + " " + symbol));
+    if (market?.price != null) facts.append(factRow("Price", fmtPriceUsd(market.price) + " per token"));
+    else facts.append(factRow("Price", "USD price unavailable"));
+    if (market?.priceNative != null) facts.append(factRow("SOL price", fmtSol(market.priceNative, 8) + " SOL per token"));
+    const solValue = tokenSolValue(row, market, solUsd);
+    if (market?.price != null && solValue != null) {
+      facts.append(factRow("Market value", fmtUsd(row.amount * market.price) + " · " + fmtSol(solValue, 6) + " SOL"));
+    } else if (market?.price != null) {
+      facts.append(factRow("Market value", fmtUsd(row.amount * market.price)));
+    } else if (solValue != null) {
+      facts.append(factRow("Market value", fmtSol(solValue, 6) + " SOL"));
+    } else {
+      facts.append(factRow("Market value", "unavailable"));
+    }
     const links = document.createElement("div");
     links.className = "pos-links";
     const mintHref = solscanToken(row.mint);
@@ -998,20 +1096,29 @@ function renderPositions() {
       marketLink.href = market.url;
       marketLink.target = "_blank";
       marketLink.rel = "noopener noreferrer";
-      marketLink.textContent = "DexScreener";
+      marketLink.textContent = market.solQuote ? "DexScreener SOL pair" : "DexScreener";
       links.append(marketLink);
     }
     const tag = document.createElement("span");
     tag.textContent = row.program;
     links.append(tag);
-    card.append(name, amt, meta, links);
+    card.append(name, facts, links);
+    const fills = RECORDED_FILLS.get(row.mint);
+    if (fills) {
+      for (const text of fills) {
+        const note = document.createElement("p");
+        note.className = "pos-note";
+        note.textContent = "Recorded · " + text;
+        card.append(note);
+      }
+    }
     host.append(card);
   }
   if (!book.known) {
     host.append(line("One token program did not load, so the open count is incomplete. " + state.chainErrors.filter((e) => /token/i.test(e)).join(" · ")));
   }
   if (state.marketError) host.append(line(state.marketError));
-  if (book.unmarked) host.append(line(book.unmarked + " held token" + (book.unmarked === 1 ? "" : "s") + " had no DexScreener base-side price. Those values are left blank."));
+  if (book.unmarked) host.append(line(book.unmarked + " held token" + (book.unmarked === 1 ? "" : "s") + " had no SOL market value. P/L stays blank until that price loads."));
 }
 
 function renderRisk() {
@@ -1026,15 +1133,19 @@ function renderRisk() {
   ));
   host.append(check(
     "Max 2",
-    open == null ? "waiting" : open > 2 ? "Over the max-open rule." : "Inside the max of 2.",
+    open == null
+      ? "Personal rule. Waiting on token accounts. Trojan does not enforce this."
+      : open > 2
+        ? "Personal rule. Over the max of 2. Trojan does not enforce this."
+        : "Personal rule. Inside the max of 2. Trojan does not enforce this.",
     open != null && open > 2 ? "bad" : "ok"
   ));
   if (book.pnlUsd == null) {
-    host.append(check("Day stop", "Not evaluated. USD P&L is unavailable.", "wait"));
+    host.append(check("Day stop", "Personal rule. Not evaluated until cash and token market value are both priced. Trojan does not enforce this.", "wait"));
   } else if (book.pnlUsd <= -10) {
-    host.append(check("Day stop", "P&L is past the −$10 day stop.", "bad"));
+    host.append(check("Day stop", "Personal rule. P/L is past the −$10 day stop. Trojan does not enforce this.", "bad"));
   } else {
-    host.append(check("Day stop", "P&L is inside the −$10 day stop.", "ok"));
+    host.append(check("Day stop", "Personal rule. P/L is inside the −$10 day stop. Trojan does not enforce this.", "ok"));
   }
   if (book.nativeSol == null) {
     host.append(check("Buy size", "Native SOL has not loaded.", "wait"));
@@ -1045,7 +1156,7 @@ function renderRisk() {
   }
   host.append(check(
     "Sells",
-    "Copy sell is on. Auto sell is 50% at +100% and 100% at −30%. No entry is stored here.",
+    "Copy sell is on when " + TARGET_NAME + " sells. Take profit sells 50% at +100%. Stop loss sells 100% at −30%.",
     "wait"
   ));
 }
@@ -1070,11 +1181,7 @@ function renderLog() {
     return;
   }
   if (!state.walletSigs.length) {
-    const note =
-      state.endpoint?.id === "publicnode"
-        ? "This endpoint returned no signatures. Its history index can be incomplete."
-        : "No signatures returned for this wallet.";
-    host.append(line(note));
+    host.append(line("No signatures returned for this wallet."));
     return;
   }
   for (const sig of state.walletSigs) {
@@ -1112,21 +1219,11 @@ function renderLog() {
 function vaultSpot(book) {
   const price = state.priceUsd;
   const priceOk = typeof price === "number" && Number.isFinite(price) && price > 0;
-  let sol = null;
-  let usd = null;
-  let allSol = null;
-  if (book.nativeSol != null && book.known && book.rows.length === 0) {
-    sol = book.nativeSol;
-    if (priceOk) usd = sol * price;
-    allSol = sol - STAKE_SOL;
-  } else if (book.portfolioUsd != null && priceOk) {
-    sol = book.portfolioUsd / price;
-    usd = book.portfolioUsd;
-    allSol = sol - STAKE_SOL;
-  } else if (book.nativeSol != null) {
-    sol = book.nativeSol;
-  }
-  const allUsd = allSol != null && priceOk ? allSol * price : null;
+  if (book.portfolioSol == null) return { sol: null, usd: null, allSol: null, allUsd: null };
+  const sol = book.portfolioSol;
+  const usd = priceOk ? sol * price : null;
+  const allSol = sol - STAKE_SOL;
+  const allUsd = priceOk ? allSol * price : null;
   return { sol, usd, allSol, allUsd };
 }
 
@@ -1189,17 +1286,17 @@ function deskSnapshot() {
     if (seen && Number.isFinite(seen.blockTime)) {
       lines.push({
         agentId: "trojan",
-        tag: "Johnson",
+        tag: TARGET_NAME,
         text: "Last successful signature · " + formatEt(new Date(seen.blockTime * 1000), { zone: true }),
       });
     } else if (state.targetSigs.length) {
       lines.push({
         agentId: "trojan",
-        tag: "Johnson",
+        tag: TARGET_NAME,
         text: "No successful signature in the newest " + state.targetSigs.length,
       });
     } else {
-      lines.push({ agentId: "trojan", tag: "Johnson", text: "No signatures returned" });
+      lines.push({ agentId: "trojan", tag: TARGET_NAME, text: "No signatures returned" });
     }
   }
   for (const change of state.balanceChanges) {
@@ -1230,7 +1327,11 @@ function deskSnapshot() {
     lines.push({
       agentId: "all",
       tag: "Balance",
-      text: "Native " + fmtSol(book.nativeSol) + " SOL" + (book.portfolioUsd == null ? "" : " · " + fmtUsd(book.portfolioUsd)),
+      text:
+        "Cash " +
+        fmtSol(book.nativeSol, 9) +
+        " SOL" +
+        (book.portfolioUsd == null ? "" : " · portfolio " + fmtUsd(book.portfolioUsd)),
     });
   }
   return {
@@ -1243,6 +1344,7 @@ function deskSnapshot() {
     vaultAllSol: fmtVaultAllSol(spot),
     vaultAllDir: spot.allUsd != null ? spot.allUsd : spot.allSol,
     agents,
+    targetName: TARGET_NAME,
     trojan: {
       lit: Date.now() < state.trojanUntil,
       kind: state.trojanKind,
@@ -1307,7 +1409,7 @@ async function poll() {
       state.marketError = "";
     }
     const marked = portfolio();
-    if (marked.nativeSol != null) rememberSpark(marked.nativeSol, marked.portfolioUsd);
+    if (marked.portfolioSol != null) rememberSpark(marked.portfolioSol, marked.portfolioUsd);
     state.phase = "live";
     state.backoffMs = HEALTHY_MS;
     state.endpointNote = "";
@@ -1315,7 +1417,9 @@ async function poll() {
       const blocked = state.cooldowns.get("mainnet-beta");
       if (blocked && blocked > Date.now()) {
         state.endpointNote =
-          "api.mainnet-beta.solana.com refused the browser (HTTP 403). Using a public CORS endpoint.";
+          "api.mainnet-beta.solana.com refused this browser (HTTP 403). Reading " +
+          state.endpoint.url +
+          ". publicnode is not used.";
       }
     }
     schedule(HEALTHY_MS);
@@ -1365,12 +1469,22 @@ function wireCopy() {
 }
 
 function boot() {
+  $("wallet-title").textContent = WALLET_NAME;
   $("wallet-addr").textContent = WALLET;
+  $("wallet-addr").href = "https://solscan.io/account/" + WALLET;
   $("target-title").textContent = TARGET_NAME;
   $("target-addr").textContent = TARGET;
   $("target-addr").href = "https://solscan.io/account/" + TARGET;
   const copyBtn = document.querySelector("[data-copy-target]");
   if (copyBtn) copyBtn.setAttribute("data-copy", TARGET);
+  const walletCopy = document.querySelector("[data-copy-wallet]");
+  if (walletCopy) walletCopy.setAttribute("data-copy", WALLET);
+  const riskTarget = $("risk-target");
+  if (riskTarget) riskTarget.textContent = TARGET_NAME;
+  const riskWallet = $("risk-target-wallet");
+  if (riskWallet) riskWallet.textContent = TARGET;
+  const riskSell = $("risk-copy-sell");
+  if (riskSell) riskSell.textContent = "On · when " + TARGET_NAME + " sells";
   $("stake-note").textContent =
     "Recorded stake 1.106 SOL · $99.10 · " + formatEt(STAKE_AT, { zone: true }) + ". Implied stake price " + fmtUsd(STAKE_USD / STAKE_SOL) + " per SOL.";
   wireCopy();

@@ -743,6 +743,29 @@ body.show-desk #desk { display: block; }
 }
 .vault-usd { display: block; margin-top: 3px; font-size: 20px; color: var(--beam, #3dff9a); }
 .vault-sol { display: block; margin-top: 2px; color: var(--muted); font-size: 11px; }
+.vault-line {
+  display: block;
+  margin-top: 0;
+  color: var(--text);
+  font-size: 9px;
+  font-weight: 500;
+  line-height: 1.05;
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+#vault-balance { margin-top: 3px; }
+.vault-tag {
+  color: var(--muted);
+  font-size: 8px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+#vault-all.pos,
+#vault-all.pos .vault-tag { color: var(--green); }
+#vault-all.neg,
+#vault-all.neg .vault-tag { color: var(--red); }
 .city-ticker { position: absolute; left: 10px; right: 10px; bottom: 8px; z-index: 5; margin: 0; }
 
 .neon-float {

@@ -1109,9 +1109,41 @@ function renderLog() {
   }
 }
 
+function vaultSpot(book) {
+  const price = state.priceUsd;
+  const priceOk = typeof price === "number" && Number.isFinite(price) && price > 0;
+  let sol = null;
+  let usd = null;
+  let allSol = null;
+  if (book.nativeSol != null && book.known && book.rows.length === 0) {
+    sol = book.nativeSol;
+    if (priceOk) usd = sol * price;
+    allSol = sol - STAKE_SOL;
+  } else if (book.portfolioUsd != null && priceOk) {
+    sol = book.portfolioUsd / price;
+    usd = book.portfolioUsd;
+    allSol = sol - STAKE_SOL;
+  } else if (book.nativeSol != null) {
+    sol = book.nativeSol;
+  }
+  const allUsd = allSol != null && priceOk ? allSol * price : null;
+  return { sol, usd, allSol, allUsd };
+}
+
+function fmtVaultBalance(spot) {
+  if (spot.sol == null) return "—";
+  return spot.sol.toFixed(4) + " SOL · " + (spot.usd == null ? "—" : fmtUsd(spot.usd));
+}
+
+function fmtVaultAll(spot) {
+  if (spot.allSol == null) return "—";
+  return fmtPnlSol(spot.allSol) + " · " + (spot.allUsd == null ? "—" : fmtPnlUsd(spot.allUsd));
+}
+
 function deskSnapshot() {
   const now = new Date();
   const book = portfolio();
+  const spot = vaultSpot(book);
   const agents = AGENTS.map((agent) => {
     const phase = botPhase(agent, now);
     return {
@@ -1199,6 +1231,9 @@ function deskSnapshot() {
     vaultUsd: book.pnlUsd == null ? "—" : fmtPnlUsd(book.pnlUsd),
     vaultSol: book.pnlSol == null ? "P&L waiting" : fmtPnlSol(book.pnlSol),
     vaultDir: book.pnlUsd,
+    vaultBalance: fmtVaultBalance(spot),
+    vaultAll: fmtVaultAll(spot),
+    vaultAllDir: spot.allUsd != null ? spot.allUsd : spot.allSol,
     agents,
     trojan: {
       lit: Date.now() < state.trojanUntil,

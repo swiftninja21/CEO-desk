@@ -7,7 +7,9 @@ GitHub Pages (main branch, root): https://swiftninja21.github.io/CEO-desk/
 The desk reads:
 
 - Solana `getBalance`, `getSignaturesForAddress`, and `getTokenAccountsByOwner` (SPL Token and Token-2022) for copying wallet W1, `7MDqGWcdgesJHxWs2a1YSaKobcqWe7yU5kjz4XNBKPMa`
-- Solana RPC `https://api.mainnet-beta.solana.com`. If that host refuses the browser, the page uses `https://public.rpc.solanavibestation.com`. `solana-rpc.publicnode.com` is not used, because `getTokenAccountsByOwner` returns 403 there.
+- A full read (balance, signatures, SPL token accounts, and Token-2022 accounts) tries `https://public.rpc.solanavibestation.com`, then `https://api.mainnet-beta.solana.com`. From a browser on this Pages origin, mainnet-beta returns HTTP 403 with the message `Access forbidden`.
+- If both full reads fail, `getBalance` alone is tried on `https://solana.api.pocket.network`, then `https://solana-rpc.publicnode.com`. Those two are not asked for a program-wide token scan: Pocket requires a mint filter, and publicnode returns 403 for that method unless a personal token is supplied. No API key is shipped in the page.
+- When a poll fails, the last successful chain read stays on screen with its timestamp and a STALE or OFFLINE pill. The page does not invent a balance. Retry backoff stays between 20s and 60s.
 - Copy target Killua, `95TWoKkvv2z85EXBzd2z6NwbxH2f54AvwuCA9x3NoKep`. Backup is none.
 - SOL/USD from CoinGecko, then DexScreener, then Coinbase
 - Token prices from DexScreener. PUSSY (`FZxHLUGiGchY5uvvoeqh1EKiXTrGdN67WUBhUc1fLoat`) uses the SOL pair `HcyYBrZVFDDVBLtLxL5C1HDJND1p86BoNA6m7MjBKE3p`.

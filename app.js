@@ -1,5 +1,6 @@
 import { botAvatar } from "./bots.js";
 import { mountCity } from "./city.js";
+import { formatFailures, HEALTHY_MS, nextBackoff, nextPhase } from "./chainstate.js";
 import { fmtPriceUsd, portfolioMark } from "./marks.js";
 import {
   AGENTS,
@@ -33,18 +34,24 @@ const RECORDED_FILLS = new Map([
   ],
 ]);
 
-// publicnode answers getBalance, then returns 403 on getTokenAccountsByOwner.
-// mainnet-beta is the RPC to use. Browsers often get HTTP 403 from it, so
-// vibestation is only the fallback that still returns token accounts.
-const ENDPOINTS = [
-  { id: "mainnet-beta", url: "https://api.mainnet-beta.solana.com" },
+// Full reads need getTokenAccountsByOwner by program id.
+// Vibestation is tried first because a browser on the Pages origin can complete
+// that read there. mainnet-beta is second: a browser POST currently comes back
+// HTTP 403 with the JSON message "Access forbidden".
+// Pocket and publicnode are balance-only. Pocket rejects a program-wide token
+// scan, and publicnode returns 403 for that method without a personal token.
+const FULL_ENDPOINTS = [
   { id: "vibestation", url: "https://public.rpc.solanavibestation.com" },
+  { id: "mainnet-beta", url: "https://api.mainnet-beta.solana.com" },
 ];
-
-const HEALTHY_MS = 12000;
-const BACKOFF_START_MS = 15000;
-const BACKOFF_MAX_MS = 60000;
+const BALANCE_ENDPOINTS = [
+  { id: "pocket", url: "https://solana.api.pocket.network" },
+  { id: "publicnode", url: "https://solana-rpc.publicnode.com" },
+];
+const ENDPOINTS = FULL_ENDPOINTS.concat(BALANCE_ENDPOINTS);
+const GAP_MS = 500;
 const SPARK_KEY = "ceo-desk.spark.v2";
+const CHAIN_KEY = "ceo-desk.chain.v1";
 const BASE58 = /^[1-9A-HJ-NP-Za-km-z]+$/;
 
 const $ = (id) => document.getElementById(id);
@@ -53,9 +60,12 @@ const state = {
   phase: "loading",
   endpoint: null,
   endpointNote: "",
-  cooldowns: new Map(),
+  failures: [],
+  failCount: 0,
   backoffMs: HEALTHY_MS,
   nextPollAt: 0,
+  balanceAt: null,
+  tokensAt: null,
   polling: false,
   updatedAt: null,
   balanceLamports: null,
@@ -335,93 +345,143 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function withRetry(fn) {
+function failureRecord(endpoint, err) {
+  return {
+    id: endpoint.id,
+    host: endpoint.url.replace(/^https:\/\//, ""),
+    message: err?.message || "request failed",
+  };
+}
+
+async function readLamports(endpoint) {
+  const balance = await rpcCall(endpoint, "getBalance", [WALLET, { commitment: "confirmed" }]);
+  const lamports = balance?.value;
+  if (!Number.isSafeInteger(lamports)) {
+    throw new RpcError("Balance response was not a lamport count", { status: 200 });
+  }
+  return lamports;
+}
+
+async function readTokenProgram(endpoint, programId) {
+  const result = await rpcCall(endpoint, "getTokenAccountsByOwner", [
+    WALLET,
+    { programId },
+    { encoding: "jsonParsed", commitment: "confirmed" },
+  ]);
+  if (!Array.isArray(result?.value)) {
+    throw new RpcError("Token accounts response was not a list", { status: 200 });
+  }
+  return result.value;
+}
+
+async function onceAfterPause(fn) {
   try {
     return await fn();
   } catch (err) {
-    if (!(err instanceof RpcError) || (err.status !== 429 && err.status !== 503)) throw err;
-    await sleep(Math.min(err.retryAfterMs || 1600, 5000));
+    if (err?.status !== 429) throw err;
+    await sleep(1500);
     return await fn();
   }
 }
 
-function endpointReady(endpoint, now) {
-  const until = state.cooldowns.get(endpoint.id) || 0;
-  return now >= until;
-}
-
-function coolDown(endpoint, ms) {
-  const until = Date.now() + ms;
-  const prev = state.cooldowns.get(endpoint.id) || 0;
-  state.cooldowns.set(endpoint.id, Math.max(prev, until));
+async function tryFull(endpoint, errors) {
+  let lamports;
+  try {
+    lamports = await onceAfterPause(() => readLamports(endpoint));
+  } catch (err) {
+    errors.push(failureRecord(endpoint, err));
+    return null;
+  }
+  await sleep(GAP_MS);
+  let walletSigs = null;
+  let targetSigs = null;
+  try {
+    const sigs = await onceAfterPause(() => getSignatures(endpoint));
+    walletSigs = Array.isArray(sigs.wallet) ? sigs.wallet : [];
+    targetSigs = Array.isArray(sigs.target) ? sigs.target : [];
+  } catch (err) {
+    errors.push(failureRecord(endpoint, err));
+  }
+  try {
+    await sleep(GAP_MS);
+    const spl = await onceAfterPause(() => readTokenProgram(endpoint, SPL));
+    await sleep(GAP_MS);
+    const t22 = await onceAfterPause(() => readTokenProgram(endpoint, TOKEN_2022));
+    return { endpoint, lamports, spl, t22, walletSigs, targetSigs, errors: [], full: true };
+  } catch (err) {
+    errors.push(failureRecord(endpoint, err));
+    return { endpoint, lamports, full: false };
+  }
 }
 
 async function loadChain() {
-  const now = Date.now();
-  const ordered = ENDPOINTS.filter((ep) => endpointReady(ep, now));
-  const tryList = ordered.length ? ordered : ENDPOINTS;
-  let lastError = null;
-  for (const endpoint of tryList) {
+  const errors = [];
+  let fallback = null;
+  for (const endpoint of FULL_ENDPOINTS) {
+    const got = await tryFull(endpoint, errors);
+    if (got?.full) return { full: got, lamports: got.lamports, errors };
+    if (got && Number.isSafeInteger(got.lamports)) fallback = got.lamports;
+  }
+  for (const endpoint of BALANCE_ENDPOINTS) {
+    if (fallback != null) break;
     try {
-      const balance = await withRetry(() => rpcCall(endpoint, "getBalance", [WALLET, { commitment: "confirmed" }]));
-      const lamports = balance?.value;
-      if (!Number.isSafeInteger(lamports)) {
-        throw new RpcError("Balance response was not a lamport count", { status: 200 });
-      }
-      const partial = {
-        endpoint,
-        lamports,
-        walletSigs: null,
-        targetSigs: null,
-        spl: null,
-        t22: null,
-        errors: [],
-      };
-      const steps = [
-        async () => {
-          const sigs = await withRetry(() => getSignatures(endpoint));
-          partial.walletSigs = Array.isArray(sigs.wallet) ? sigs.wallet : [];
-          partial.targetSigs = Array.isArray(sigs.target) ? sigs.target : [];
-        },
-        async () => {
-          const spl = await withRetry(() => rpcCall(endpoint, "getTokenAccountsByOwner", [
-            WALLET,
-            { programId: SPL },
-            { encoding: "jsonParsed", commitment: "confirmed" },
-          ]));
-          partial.spl = Array.isArray(spl?.value) ? spl.value : [];
-        },
-        async () => {
-          const t22 = await withRetry(() => rpcCall(endpoint, "getTokenAccountsByOwner", [
-            WALLET,
-            { programId: TOKEN_2022 },
-            { encoding: "jsonParsed", commitment: "confirmed" },
-          ]));
-          partial.t22 = Array.isArray(t22?.value) ? t22.value : [];
-        },
-      ];
-      const labels = ["signatures", "SPL token accounts", "Token-2022 accounts"];
-      for (let i = 0; i < steps.length; i += 1) {
-        await sleep(350);
-        try {
-          await steps[i]();
-        } catch (err) {
-          partial.errors.push(labels[i] + ": " + (err?.message || String(err)));
-        }
-      }
-      return partial;
+      fallback = await readLamports(endpoint);
     } catch (err) {
-      lastError = err;
-      const limited = err.status === 403 || err.status === 429 || err.status === 1010;
-      const pause = err.retryAfterMs || (err.status === 403 ? 10 * 60 * 1000 : 45 * 1000);
-      if (limited || err.status === 0) coolDown(endpoint, pause);
-      state.endpointNote =
-        endpoint.id === "mainnet-beta" && err.status === 403
-          ? "api.mainnet-beta.solana.com refused the browser (HTTP 403)."
-          : `${endpoint.url} failed: ${err.message}`;
+      errors.push(failureRecord(endpoint, err));
     }
   }
-  throw lastError || new RpcError("No Solana RPC endpoint responded");
+  return { full: null, lamports: fallback, errors };
+}
+
+function loadChainSnapshot() {
+  try {
+    const raw = localStorage.getItem(CHAIN_KEY);
+    if (!raw || raw.length > 200000) return null;
+    const data = JSON.parse(raw);
+    if (!data || !Number.isSafeInteger(data.lamports) || !Number.isFinite(data.balanceAt)) return null;
+    if (data.spl != null && !Array.isArray(data.spl)) return null;
+    if (data.t22 != null && !Array.isArray(data.t22)) return null;
+    return data;
+  } catch {
+    return null;
+  }
+}
+
+function saveChainSnapshot() {
+  if (!Number.isSafeInteger(state.balanceLamports) || !Number.isFinite(state.balanceAt)) return;
+  try {
+    localStorage.setItem(CHAIN_KEY, JSON.stringify({
+      balanceAt: state.balanceAt,
+      tokensAt: state.tokensAt,
+      endpointId: state.endpoint?.id || "",
+      lamports: state.balanceLamports,
+      spl: state.spl,
+      t22: state.t22,
+      walletSigs: state.walletSigs,
+      targetSigs: state.targetSigs,
+    }));
+  } catch {
+    /* private mode or quota — this session still shows the read */
+  }
+}
+
+function adoptSnapshot(data) {
+  state.balanceLamports = data.lamports;
+  state.balanceAt = data.balanceAt;
+  state.tokensAt = Number.isFinite(data.tokensAt) ? data.tokensAt : null;
+  state.spl = Array.isArray(data.spl) ? data.spl : null;
+  state.t22 = Array.isArray(data.t22) ? data.t22 : null;
+  state.walletSigs = Array.isArray(data.walletSigs) ? data.walletSigs : null;
+  state.targetSigs = Array.isArray(data.targetSigs) ? data.targetSigs : null;
+  state.updatedAt = data.balanceAt;
+  state.endpoint = ENDPOINTS.find((item) => item.id === data.endpointId) || null;
+  state.phase = "stale";
+}
+
+function applyBalanceOnly(lamports) {
+  state.balanceLamports = lamports;
+  state.balanceAt = Date.now();
+  saveChainSnapshot();
 }
 
 function marketFromPair(pair, mint) {
@@ -599,7 +659,12 @@ function portfolio() {
     tokenSol: unmarked === 0 ? tokenSol : null,
     stakeSol: STAKE_SOL,
     solUsd: priceOk ? price : null,
-    tokensPriced: known && unmarked === 0 && nativeSol != null,
+    tokensPriced:
+      known &&
+      unmarked === 0 &&
+      nativeSol != null &&
+      state.balanceAt != null &&
+      state.balanceAt === state.tokensAt,
   });
   return {
     nativeSol,
@@ -672,12 +737,16 @@ function applyChain(partial) {
   }
   state.endpoint = partial.endpoint;
   state.balanceLamports = partial.lamports;
-  state.walletSigs = partial.walletSigs;
-  state.targetSigs = partial.targetSigs;
+  if (Array.isArray(partial.walletSigs)) state.walletSigs = partial.walletSigs;
+  if (Array.isArray(partial.targetSigs)) state.targetSigs = partial.targetSigs;
   state.spl = partial.spl;
   state.t22 = partial.t22;
-  state.chainErrors = partial.errors;
+  state.chainErrors = partial.errors || [];
   state.updatedAt = Date.now();
+  state.balanceAt = state.updatedAt;
+  state.tokensAt = state.updatedAt;
+  state.failures = [];
+  saveChainSnapshot();
   const after = portfolio();
   if (before && before.known && after.known && before.nativeSol != null && after.nativeSol != null) {
     const move = classifyMove(before, after);
@@ -691,37 +760,64 @@ function applyChain(partial) {
   }
 }
 
+function readStamp(ms) {
+  if (!Number.isFinite(ms)) return "";
+  return formatEt(new Date(ms), { zone: true });
+}
+
 function renderStatus() {
   const pill = $("live-pill");
   const dot = $("live-dot");
   const label = $("live-label");
   pill.classList.remove("is-live", "is-wait", "is-bad");
+  dot.classList.remove("pulse");
   if (state.phase === "live") {
     pill.classList.add("is-live");
     dot.classList.add("pulse");
     label.textContent = "LIVE";
-  } else if (state.phase === "reconnecting") {
+  } else if (state.phase === "stale") {
     pill.classList.add("is-bad");
-    dot.classList.add("pulse");
-    label.textContent = "RECONNECTING";
+    label.textContent = "STALE";
+  } else if (state.phase === "offline") {
+    pill.classList.add("is-bad");
+    label.textContent = "OFFLINE";
   } else {
     pill.classList.add("is-wait");
-    dot.classList.remove("pulse");
     label.textContent = "LOADING";
   }
 
   const bits = [];
   const secs = Math.max(0, Math.ceil((state.nextPollAt - Date.now()) / 1000));
-  if (state.phase === "reconnecting") bits.push("reconnecting · retry " + secs + "s");
-  else if (state.phase === "loading") bits.push("loading public data");
-  if (state.endpoint) bits.push(state.endpoint.url.replace(/^https:\/\//, ""));
-  if (state.updatedAt) bits.push("chain " + fmtAgo(Date.now() - state.updatedAt));
+  if (state.phase === "loading") bits.push("loading public data");
+  else if (state.phase === "offline") {
+    bits.push("offline · no chain snapshot yet");
+    if (state.polling) bits.push("reading");
+    else if (state.nextPollAt > Date.now()) bits.push("retry " + secs + "s");
+  }
+  else if (state.phase === "stale") {
+    const cashAt = readStamp(state.balanceAt);
+    const tokensAt = readStamp(state.tokensAt);
+    if (cashAt && tokensAt && state.balanceAt !== state.tokensAt) {
+      bits.push("stale · cash " + cashAt + " · positions " + tokensAt);
+    } else if (cashAt && !state.tokensAt) {
+      bits.push("stale · cash " + cashAt + " · token accounts not loaded");
+    } else if (cashAt) {
+      bits.push("stale · last chain read " + cashAt);
+    } else {
+      bits.push("stale");
+    }
+    if (state.polling) bits.push("reading");
+    else if (state.nextPollAt > Date.now()) bits.push("retry " + secs + "s");
+  } else {
+    if (state.endpoint) bits.push(state.endpoint.url.replace(/^https:\/\//, ""));
+    if (state.updatedAt) bits.push("chain " + fmtAgo(Date.now() - state.updatedAt));
+    bits.push("updates in " + secs + "s");
+  }
   if (state.priceSource && state.priceUsd != null) bits.push("SOL " + fmtUsd(state.priceUsd) + " · " + state.priceSource);
   else if (state.priceError) bits.push("price unavailable");
-  if (state.phase === "live") bits.push("updates in " + secs + "s");
   setText("status", bits.filter(Boolean).join("  ·  "));
   const notes = [];
-  if (state.endpointNote) notes.push(state.endpointNote);
+  if ((state.phase === "stale" || state.phase === "offline") && state.endpointNote) notes.push(state.endpointNote);
   if (state.priceUsd == null && state.priceError) notes.push(state.priceError);
   setText("status-note", notes.join(" "));
 }
@@ -732,21 +828,22 @@ function renderMetrics() {
   setText("start-usd", fmtUsd(STAKE_USD));
 
   if (book.nativeSol == null) {
-    setText("bal-sol", state.phase === "reconnecting" ? "unavailable" : "—");
-    setText("bal-usd", state.phase === "loading" ? "waiting for RPC" : "balance unavailable");
+    setText("bal-sol", state.phase === "loading" ? "—" : "unavailable");
+    setText("bal-usd", state.phase === "loading" ? "waiting for RPC" : "no chain snapshot");
   } else {
     paintNumber("bal-sol", fmtSol(book.nativeSol, 9) + " SOL", 0);
-    if (!book.known) {
-      setText("bal-usd", "portfolio waiting on token accounts");
-    } else if (book.unmarked) {
-      setText("bal-usd", "portfolio waiting on token price");
-    } else if (book.portfolioUsd == null) {
-      setText("bal-usd", book.rows.length ? "portfolio " + fmtSol(book.portfolioSol) + " SOL" : "USD waiting on price");
-    } else if (book.rows.length) {
-      paintNumber("bal-usd", "Portfolio " + fmtSol(book.portfolioSol) + " SOL · " + fmtUsd(book.portfolioUsd), 0);
-    } else {
-      paintNumber("bal-usd", fmtUsd(book.portfolioUsd), 0);
+    let detail;
+    if (!book.known) detail = "portfolio waiting on token accounts";
+    else if (state.tokensAt != null && state.balanceAt !== state.tokensAt) detail = "P/L not combined across two read times";
+    else if (book.unmarked) detail = "portfolio waiting on token price";
+    else if (book.portfolioUsd == null) detail = book.rows.length ? "portfolio " + fmtSol(book.portfolioSol) + " SOL" : "USD waiting on price";
+    else if (book.rows.length) detail = "Portfolio " + fmtSol(book.portfolioSol) + " SOL · " + fmtUsd(book.portfolioUsd);
+    else detail = fmtUsd(book.portfolioUsd);
+    if (state.phase !== "live" && state.balanceAt != null && state.balanceAt === state.tokensAt) {
+      detail = "as of " + readStamp(state.balanceAt) + " · " + detail;
     }
+    if (book.portfolioUsd != null && state.phase === "live") paintNumber("bal-usd", detail, 0);
+    else setText("bal-usd", detail);
   }
 
   const pnl = $("pnl-card");
@@ -756,6 +853,7 @@ function renderMetrics() {
   paintNumber("pnl-usd", book.pnlUsd == null ? "—" : fmtPnlUsd(book.pnlUsd), book.pnlUsd ?? 0);
   if (book.pnlSol != null) setText("pnl-sol", fmtPnlSol(book.pnlSol));
   else if (book.nativeSol == null) setText("pnl-sol", "—");
+  else if (state.tokensAt != null && state.balanceAt !== state.tokensAt) setText("pnl-sol", "not combined across two read times");
   else if (!book.known) setText("pnl-sol", "waiting on token accounts");
   else if (book.unmarked) setText("pnl-sol", "waiting on token price");
   else setText("pnl-sol", "waiting on SOL price");
@@ -1071,10 +1169,12 @@ function renderPositions() {
     else facts.append(factRow("Price", "USD price unavailable"));
     if (market?.priceNative != null) facts.append(factRow("SOL price", fmtSol(market.priceNative, 8) + " SOL per token"));
     const solValue = tokenSolValue(row, market, solUsd);
+    const valueUsd = market?.price != null ? row.amount * market.price : null;
+    const valueUsdText = valueUsd != null && Math.abs(valueUsd) > 0 && Math.abs(valueUsd) < 0.01 ? fmtPriceUsd(valueUsd) : fmtUsd(valueUsd);
     if (market?.price != null && solValue != null) {
-      facts.append(factRow("Market value", fmtUsd(row.amount * market.price) + " · " + fmtSol(solValue, 6) + " SOL"));
+      facts.append(factRow("Market value", valueUsdText + " · " + fmtSol(solValue, 6) + " SOL"));
     } else if (market?.price != null) {
-      facts.append(factRow("Market value", fmtUsd(row.amount * market.price)));
+      facts.append(factRow("Market value", valueUsdText));
     } else if (solValue != null) {
       facts.append(factRow("Market value", fmtSol(solValue, 6) + " SOL"));
     } else {
@@ -1113,6 +1213,9 @@ function renderPositions() {
       }
     }
     host.append(card);
+  }
+  if (state.phase !== "live" && state.tokensAt) {
+    host.append(line("Token accounts as of " + readStamp(state.tokensAt) + "."));
   }
   if (!book.known) {
     host.append(line("One token program did not load, so the open count is incomplete. " + state.chainErrors.filter((e) => /token/i.test(e)).join(" · ")));
@@ -1371,58 +1474,57 @@ function render() {
   if (city) city.sync();
 }
 
+async function refreshMarkets() {
+  const mints = [...new Set(positionsFromState().rows.map((row) => row.mint))];
+  if (!mints.length) {
+    state.marketError = "";
+    return;
+  }
+  const markets = await fetchMarkets(mints);
+  if (markets.markets.size) state.markets = markets.markets;
+  state.marketError = markets.error;
+}
+
 async function poll() {
   if (state.polling) return;
   state.polling = true;
   renderStatus();
   try {
-    const [chainR, priceR] = await Promise.all([
-      loadChain().then((v) => ({ ok: true, v })).catch((e) => ({ ok: false, e })),
-      fetchSolPrice(),
-    ]);
+    const [chain, priceR] = await Promise.all([loadChain(), fetchSolPrice()]);
     state.priceUsd = priceR.usd;
     state.priceSource = priceR.source;
     state.priceError = priceR.error || "";
 
-    if (!chainR.ok) {
-      state.phase = "reconnecting";
-      state.backoffMs = Math.min(
-        BACKOFF_MAX_MS,
-        Math.max(BACKOFF_START_MS, state.backoffMs === HEALTHY_MS ? BACKOFF_START_MS : state.backoffMs * 2)
-      );
-      if (chainR.e?.retryAfterMs) state.backoffMs = Math.max(state.backoffMs, chainR.e.retryAfterMs);
-      state.endpointNote = chainR.e?.message || "RPC failed";
-      schedule(state.backoffMs);
+    if (chain.full) {
+      applyChain(chain.full);
+      await refreshMarkets();
+      const marked = portfolio();
+      if (marked.portfolioSol != null) rememberSpark(marked.portfolioSol, marked.portfolioUsd);
+      state.phase = "live";
+      state.failCount = 0;
+      state.failures = [];
+      state.endpointNote = "";
+      state.backoffMs = HEALTHY_MS;
+      schedule(HEALTHY_MS);
       render();
       return;
     }
 
-    applyChain(chainR.v);
-    const book = portfolio();
-    const mints = [...new Set(book.rows.map((row) => row.mint))];
-    if (mints.length) {
-      const markets = await fetchMarkets(mints);
-      state.markets = markets.markets;
-      state.marketError = markets.error;
-    } else {
-      state.markets = new Map();
-      state.marketError = "";
-    }
-    const marked = portfolio();
-    if (marked.portfolioSol != null) rememberSpark(marked.portfolioSol, marked.portfolioUsd);
-    state.phase = "live";
-    state.backoffMs = HEALTHY_MS;
-    state.endpointNote = "";
-    if (state.endpoint?.id !== "mainnet-beta") {
-      const blocked = state.cooldowns.get("mainnet-beta");
-      if (blocked && blocked > Date.now()) {
-        state.endpointNote =
-          "api.mainnet-beta.solana.com refused this browser (HTTP 403). Reading " +
-          state.endpoint.url +
-          ". publicnode is not used.";
-      }
-    }
-    schedule(HEALTHY_MS);
+    if (Number.isSafeInteger(chain.lamports)) applyBalanceOnly(chain.lamports);
+    state.failures = chain.errors;
+    state.endpointNote = formatFailures(chain.errors);
+    state.failCount += 1;
+    state.phase = nextPhase(false, state.balanceLamports != null);
+    state.backoffMs = nextBackoff(state.failCount);
+    await refreshMarkets();
+    schedule(state.backoffMs);
+    render();
+  } catch (err) {
+    state.failCount += 1;
+    state.phase = nextPhase(false, state.balanceLamports != null);
+    state.endpointNote = err?.message || "Chain read failed";
+    state.backoffMs = nextBackoff(state.failCount);
+    schedule(state.backoffMs);
     render();
   } finally {
     state.polling = false;
@@ -1487,6 +1589,8 @@ function boot() {
   if (riskSell) riskSell.textContent = "On · when " + TARGET_NAME + " sells";
   $("stake-note").textContent =
     "Recorded stake 1.106 SOL · $99.10 · " + formatEt(STAKE_AT, { zone: true }) + ". Implied stake price " + fmtUsd(STAKE_USD / STAKE_SOL) + " per SOL.";
+  const saved = loadChainSnapshot();
+  if (saved) adoptSnapshot(saved);
   wireCopy();
   city = mountCity(deskSnapshot);
   render();

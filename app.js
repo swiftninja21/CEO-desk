@@ -1,15 +1,16 @@
-import { botAvatar } from "./bots.js";
-import { mountCity } from "./city.js";
+import { botAvatar } from "./bots.js?v=20261112c";
+import { mountCity } from "./city.js?v=20261112c";
 import {
   etDateKey,
   formatFailures,
   HEALTHY_MS,
+  isTransportError,
   nextBackoff,
   nextPhase,
   resolveDayBaseline,
   todayChange,
-} from "./chainstate.js";
-import { fmtPriceUsd, portfolioMark } from "./marks.js";
+} from "./chainstate.js?v=20261112c";
+import { fmtPriceUsd, portfolioMark } from "./marks.js?v=20261112c";
 import {
   AGENTS,
   STAKE_AT,
@@ -19,7 +20,7 @@ import {
   formatCountdown,
   formatElapsed,
   formatEt,
-} from "./schedule.js";
+} from "./schedule.js?v=20261112c";
 
 const WALLET = "7MDqGWcdgesJHxWs2a1YSaKobcqWe7yU5kjz4XNBKPMa";
 const WALLET_NAME = "W1";
@@ -51,18 +52,18 @@ const RECORDED_FILLS = new Map([
 ]);
 
 // Full reads need getTokenAccountsByOwner by program id.
-// Vibestation is tried first because a browser on the Pages origin can complete
-// that read there. mainnet-beta is second: a browser POST currently comes back
-// HTTP 403 with the JSON message "Access forbidden".
-// Pocket and publicnode are balance-only. Pocket rejects a program-wide token
-// scan, and publicnode returns 403 for that method without a personal token.
+// Vibestation is first. A Safari "Load failed" or HTTP 429 rotates to publicnode,
+// then api.mainnet-beta.solana.com. Pocket is balance-only: it rejects a
+// program-wide token scan. publicnode may 403 that method without a personal
+// token; the balance call is still used, and the last full book stays on screen.
 const FULL_ENDPOINTS = [
   { id: "vibestation", url: "https://public.rpc.solanavibestation.com" },
+  { id: "publicnode", url: "https://solana-rpc.publicnode.com" },
   { id: "mainnet-beta", url: "https://api.mainnet-beta.solana.com" },
 ];
 const BALANCE_ENDPOINTS = [
-  { id: "pocket", url: "https://solana.api.pocket.network" },
   { id: "publicnode", url: "https://solana-rpc.publicnode.com" },
+  { id: "pocket", url: "https://solana.api.pocket.network" },
 ];
 const ENDPOINTS = FULL_ENDPOINTS.concat(BALANCE_ENDPOINTS);
 const GAP_MS = 500;
@@ -418,6 +419,7 @@ async function tryFull(endpoint, errors) {
     targetSigs = Array.isArray(sigs.target) ? sigs.target : [];
   } catch (err) {
     errors.push(failureRecord(endpoint, err));
+    if (isTransportError(err)) return { endpoint, lamports, full: false };
   }
   try {
     await sleep(GAP_MS);
@@ -434,15 +436,26 @@ async function tryFull(endpoint, errors) {
 async function loadChain() {
   const errors = [];
   let fallback = null;
+  const saw = new Set();
   for (const endpoint of FULL_ENDPOINTS) {
-    const got = await tryFull(endpoint, errors);
+    saw.add(endpoint.id);
+    let got = null;
+    try {
+      got = await tryFull(endpoint, errors);
+    } catch (err) {
+      errors.push(failureRecord(endpoint, err));
+    }
     if (got?.full) return { full: got, lamports: got.lamports, errors };
     if (got && Number.isSafeInteger(got.lamports)) fallback = got.lamports;
   }
   for (const endpoint of BALANCE_ENDPOINTS) {
-    if (fallback != null) break;
+    if (saw.has(endpoint.id) && Number.isSafeInteger(fallback)) continue;
     try {
-      fallback = await readLamports(endpoint);
+      const lamports = await readLamports(endpoint);
+      if (Number.isSafeInteger(lamports)) {
+        fallback = lamports;
+        break;
+      }
     } catch (err) {
       errors.push(failureRecord(endpoint, err));
     }
@@ -466,6 +479,7 @@ function loadChainSnapshot() {
 
 function saveChainSnapshot() {
   if (!Number.isSafeInteger(state.balanceLamports) || !Number.isFinite(state.balanceAt)) return;
+  if (state.tokensAt != null && state.balanceAt !== state.tokensAt) return;
   try {
     localStorage.setItem(CHAIN_KEY, JSON.stringify({
       balanceAt: state.balanceAt,
@@ -712,12 +726,7 @@ function portfolio() {
     tokenSol: unmarked === 0 ? tokenSol : null,
     stakeSol: STAKE_SOL,
     solUsd: priceOk ? price : null,
-    tokensPriced:
-      known &&
-      unmarked === 0 &&
-      nativeSol != null &&
-      state.balanceAt != null &&
-      state.balanceAt === state.tokensAt,
+    tokensPriced: known && unmarked === 0 && nativeSol != null,
   });
   return {
     nativeSol,
@@ -887,13 +896,12 @@ function renderMetrics() {
     paintNumber("bal-sol", fmtSol(book.nativeSol, 9) + " SOL", 0);
     let detail;
     if (!book.known) detail = "portfolio waiting on token accounts";
-    else if (state.tokensAt != null && state.balanceAt !== state.tokensAt) detail = "P/L not combined across two read times";
     else if (book.unmarked) detail = "portfolio waiting on token price";
     else if (book.portfolioUsd == null) detail = book.rows.length ? "portfolio " + fmtSol(book.portfolioSol) + " SOL" : "USD waiting on price";
     else if (book.rows.length) detail = "Portfolio " + fmtSol(book.portfolioSol) + " SOL · " + fmtUsd(book.portfolioUsd);
     else detail = fmtUsd(book.portfolioUsd);
-    if (state.phase !== "live" && state.balanceAt != null && state.balanceAt === state.tokensAt) {
-      detail = "as of " + readStamp(state.balanceAt) + " · " + detail;
+    if (state.phase !== "live" && (state.balanceAt != null || state.tokensAt != null)) {
+      detail = "as of " + readStamp(state.tokensAt || state.balanceAt) + " · " + detail;
     }
     if (book.portfolioUsd != null && state.phase === "live") paintNumber("bal-usd", detail, 0);
     else setText("bal-usd", detail);
@@ -906,7 +914,6 @@ function renderMetrics() {
   paintNumber("pnl-usd", book.pnlUsd == null ? "—" : fmtPnlUsd(book.pnlUsd), book.pnlUsd ?? 0);
   if (book.pnlSol != null) setText("pnl-sol", fmtPnlSol(book.pnlSol));
   else if (book.nativeSol == null) setText("pnl-sol", "—");
-  else if (state.tokensAt != null && state.balanceAt !== state.tokensAt) setText("pnl-sol", "not combined across two read times");
   else if (!book.known) setText("pnl-sol", "waiting on token accounts");
   else if (book.unmarked) setText("pnl-sol", "waiting on token price");
   else setText("pnl-sol", "waiting on SOL price");
@@ -1574,7 +1581,8 @@ async function poll() {
       return;
     }
 
-    if (Number.isSafeInteger(chain.lamports)) applyBalanceOnly(chain.lamports);
+    const haveTokens = state.tokensAt != null && (state.spl != null || state.t22 != null);
+    if (!haveTokens && Number.isSafeInteger(chain.lamports)) applyBalanceOnly(chain.lamports);
     state.failures = chain.errors;
     state.endpointNote = formatFailures(chain.errors);
     state.failCount += 1;

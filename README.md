@@ -7,8 +7,8 @@ GitHub Pages (main branch, root): https://swiftninja21.github.io/CEO-desk/
 The desk reads:
 
 - Solana `getBalance`, `getSignaturesForAddress`, and `getTokenAccountsByOwner` (SPL Token and Token-2022) for copying wallet W1, `7MDqGWcdgesJHxWs2a1YSaKobcqWe7yU5kjz4XNBKPMa`
-- A full read (balance, signatures, SPL token accounts, and Token-2022 accounts) tries `https://public.rpc.solanavibestation.com`, then `https://api.mainnet-beta.solana.com`. From a browser on this Pages origin, mainnet-beta returns HTTP 403 with the message `Access forbidden`.
-- If both full reads fail, `getBalance` alone is tried on `https://solana.api.pocket.network`, then `https://solana-rpc.publicnode.com`. Those two are not asked for a program-wide token scan: Pocket requires a mint filter, and publicnode returns 403 for that method unless a personal token is supplied. No API key is shipped in the page.
+- A full read (balance, signatures, SPL token accounts, and Token-2022 accounts) tries `https://public.rpc.solanavibestation.com`, then `https://solana-rpc.publicnode.com`, then `https://api.mainnet-beta.solana.com`. A Safari `Load failed`, a timeout, or HTTP 429 moves to the next host. From a browser on this Pages origin, mainnet-beta returns HTTP 403 with the message `Access forbidden`. publicnode may also 403 a program-wide token scan unless a personal token is supplied; no API key is shipped in the page.
+- If those full reads fail, `getBalance` alone is tried on publicnode, then `https://solana.api.pocket.network` (Pocket requires a mint filter for token scans). A failed poll keeps the last complete portfolio on the vault instead of clearing it.
 - When a poll fails, the last successful chain read stays on screen with its timestamp and a STALE or OFFLINE pill. The page does not invent a balance. Retry backoff stays between 20s and 60s.
 - Copy target 8P, `8pYLN2Zm9ECVRXHRcU7a4tYpSPMaJME3Qt7JKa9LirEG`, on execution wallet W1. Backup is none. Killua is history, labeled Killua-era.
 - SOL/USD from CoinGecko, then DexScreener, then Coinbase

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { etDateKey, formatFailures, nextBackoff, nextPhase, resolveDayBaseline, todayChange } from "./chainstate.js";
+import { etDateKey, formatFailures, isTransportError, nextBackoff, nextPhase, resolveDayBaseline, todayChange } from "./chainstate.js";
 
 test("a failed poll with a previous read is stale, and without one is offline", () => {
   assert.equal(nextPhase(true, true), "live");
@@ -43,6 +43,12 @@ test("today is the portfolio change since the midnight baseline", () => {
 test("ET date rolls at midnight New York", () => {
   assert.equal(etDateKey(new Date("2026-11-12T04:59:00Z")), "2026-11-11");
   assert.equal(etDateKey(new Date("2026-11-12T05:00:00Z")), "2026-11-12");
+});
+
+test("Safari Load failed is a transport error that should move to the next host", () => {
+  assert.equal(isTransportError({ status: 0, message: "Load failed" }), true);
+  assert.equal(isTransportError({ status: 0, message: "Failed to fetch" }), true);
+  assert.equal(isTransportError({ status: 403, message: "Access forbidden" }), false);
 });
 
 test("a refusal names the host instead of a bare Access forbidden", () => {

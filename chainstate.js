@@ -52,6 +52,12 @@ export function todayChange(portfolioSol, baselineSol, solUsd) {
   return { sol, usd: priceOk ? sol * solUsd : null };
 }
 
+export function isTransportError(err) {
+  const message = String((err && err.message) || err || "").toLowerCase();
+  const status = err && err.status;
+  return status === 0 || status == null || /load failed|failed to fetch|network|timed out|abort|typeerror/.test(message);
+}
+
 export function formatFailures(failures) {
   const seen = new Set();
   const parts = [];

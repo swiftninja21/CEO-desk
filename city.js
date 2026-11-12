@@ -1,7 +1,7 @@
 // Isometric city. Canvas2D, capped at 30fps, paused while hidden.
 // Beams follow the cron RUNNING window. Trojan lights only after a real balance move.
 
-import { AGENTS } from "./schedule.js";
+import { AGENTS } from "./schedule.js?v=20261112c";
 
 const FRAME_MS = 1000 / 30;
 const SIGNS = ["SOLANA", "COPY TRADE", "RUG CHECK", "DIAMOND HANDS"];

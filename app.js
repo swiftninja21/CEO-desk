@@ -1,6 +1,14 @@
 import { botAvatar } from "./bots.js";
 import { mountCity } from "./city.js";
-import { formatFailures, HEALTHY_MS, nextBackoff, nextPhase } from "./chainstate.js";
+import {
+  etDateKey,
+  formatFailures,
+  HEALTHY_MS,
+  nextBackoff,
+  nextPhase,
+  resolveDayBaseline,
+  todayChange,
+} from "./chainstate.js";
 import { fmtPriceUsd, portfolioMark } from "./marks.js";
 import {
   AGENTS,
@@ -15,9 +23,17 @@ import {
 
 const WALLET = "7MDqGWcdgesJHxWs2a1YSaKobcqWe7yU5kjz4XNBKPMa";
 const WALLET_NAME = "W1";
-const TARGET = "95TWoKkvv2z85EXBzd2z6NwbxH2f54AvwuCA9x3NoKep";
-const TARGET_NAME = "Killua";
+const TARGET = "8pYLN2Zm9ECVRXHRcU7a4tYpSPMaJME3Qt7JKa9LirEG";
+const TARGET_NAME = "8P";
+const BUY_SOL = 0.05;
 const TARGET_SIG_LIMIT = 20;
+const KILLUA_ERA = new Set([
+  "85gJ7HucRUpPjLZP9KVWEKyB85uBxtwMfqzm9ufNpump",
+  "F9z9AApXAF7Z2mXxXegg9BmkuRLfgrYR5WHpdDJMpump",
+  "36CNzFyiMSMGM7ZG97YgBedZHF99Kcf5b5PKZq8fLoat",
+  "Bv1a7cEj5aRnJQhMw4kRQqAFesMSd5LwcDnUzq52BMmr",
+  "FZxHLUGiGchY5uvvoeqh1EKiXTrGdN67WUBhUc1fLoat",
+]);
 const SPL = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
 const TOKEN_2022 = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb";
 const WSOL = "So11111111111111111111111111111111111111112";
@@ -28,8 +44,8 @@ const RECORDED_FILLS = new Map([
   [
     PUSSY_MINT,
     [
-      "Bought 9,654.832242 for 0.1 SOL · Nov 8, 2026 · 3:41:27 PM ET",
-      "Sold half for 0.093487197 SOL net · Nov 8, 2026 · 4:00:12 PM ET",
+      "Killua-era · Bought 9,654.832242 for 0.1 SOL · Nov 8, 2026 · 3:41:27 PM ET",
+      "Killua-era · Sold half for 0.093487197 SOL net · Nov 8, 2026 · 4:00:12 PM ET",
     ],
   ],
 ]);
@@ -52,6 +68,7 @@ const ENDPOINTS = FULL_ENDPOINTS.concat(BALANCE_ENDPOINTS);
 const GAP_MS = 500;
 const SPARK_KEY = "ceo-desk.spark.v2";
 const CHAIN_KEY = "ceo-desk.chain.v1";
+const DAY_KEY = "ceo-desk.day.v1";
 const BASE58 = /^[1-9A-HJ-NP-Za-km-z]+$/;
 
 const $ = (id) => document.getElementById(id);
@@ -482,6 +499,42 @@ function applyBalanceOnly(lamports) {
   state.balanceLamports = lamports;
   state.balanceAt = Date.now();
   saveChainSnapshot();
+}
+
+function loadDayBaselines() {
+  try {
+    const raw = localStorage.getItem(DAY_KEY);
+    const parsed = raw ? JSON.parse(raw) : {};
+    if (!parsed || typeof parsed !== "object") return {};
+    const out = {};
+    for (const [key, value] of Object.entries(parsed)) {
+      if (/^\d{4}-\d{2}-\d{2}$/.test(key) && Number.isFinite(value)) out[key] = value;
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+function saveDayBaselines(stored) {
+  try {
+    localStorage.setItem(DAY_KEY, JSON.stringify(stored));
+  } catch {
+    /* the in-memory baseline still covers this session */
+  }
+}
+
+function currentToday(book) {
+  const key = etDateKey(new Date());
+  const result = resolveDayBaseline(key, loadDayBaselines(), book.portfolioSol);
+  if (result.wrote) saveDayBaselines(result.stored);
+  return todayChange(book.portfolioSol, result.sol, state.priceUsd);
+}
+
+function isKilluaEra(row, market) {
+  if (KILLUA_ERA.has(row.mint)) return true;
+  const blob = ((market?.symbol || "") + " " + (market?.name || "")).toLowerCase();
+  return /\bvibeshift\b|\bkfc\b|\bdust\b/.test(blob);
 }
 
 function marketFromPair(pair, mint) {
@@ -1161,6 +1214,12 @@ function renderPositions() {
     const sub = document.createElement("span");
     sub.textContent = market?.name || "DexScreener name unavailable";
     name.append(sym, sub);
+    if (isKilluaEra(row, market)) {
+      const era = document.createElement("span");
+      era.className = "era";
+      era.textContent = "Killua-era";
+      name.append(era);
+    }
     const facts = document.createElement("dl");
     facts.className = "pos-facts";
     const symbol = market?.symbol || "tokens";
@@ -1214,6 +1273,9 @@ function renderPositions() {
     }
     host.append(card);
   }
+  if (book.rows.some((row) => isKilluaEra(row, state.markets.get(row.mint)))) {
+    host.append(line("Killua-era marks vibeshift, KFC, and dust left open when copying Killua stopped."));
+  }
   if (state.phase !== "live" && state.tokensAt) {
     host.append(line("Token accounts as of " + readStamp(state.tokensAt) + "."));
   }
@@ -1243,23 +1305,24 @@ function renderRisk() {
         : "Personal rule. Inside the max of 2. Trojan does not enforce this.",
     open != null && open > 2 ? "bad" : "ok"
   ));
-  if (book.pnlUsd == null) {
-    host.append(check("Day stop", "Personal rule. Not evaluated until cash and token market value are both priced. Trojan does not enforce this.", "wait"));
-  } else if (book.pnlUsd <= -10) {
-    host.append(check("Day stop", "Personal rule. P/L is past the −$10 day stop. Trojan does not enforce this.", "bad"));
+  const today = currentToday(book);
+  if (today.usd == null) {
+    host.append(check("Day stop", "Personal rule. Today is not priced yet. The −$10 stop uses today's change since midnight ET, not all-time. Trojan does not enforce this.", "wait"));
+  } else if (today.usd <= -10) {
+    host.append(check("Day stop", "Personal rule. Today " + fmtPnlUsd(today.usd) + " is past the −$10 day stop. Trojan does not enforce this.", "bad"));
   } else {
-    host.append(check("Day stop", "Personal rule. P/L is inside the −$10 day stop. Trojan does not enforce this.", "ok"));
+    host.append(check("Day stop", "Personal rule. Today " + fmtPnlUsd(today.usd) + " is inside the −$10 day stop. Trojan does not enforce this.", "ok"));
   }
   if (book.nativeSol == null) {
     host.append(check("Buy size", "Native SOL has not loaded.", "wait"));
-  } else if (book.nativeSol + 1e-9 < 0.1) {
-    host.append(check("Buy size", "Native balance is under the fixed 0.1 SOL buy.", "bad"));
+  } else if (book.nativeSol + 1e-9 < BUY_SOL) {
+    host.append(check("Buy size", "Native balance is under the fixed " + BUY_SOL + " SOL buy.", "bad"));
   } else {
-    host.append(check("Buy size", "Native balance covers the fixed 0.1 SOL buy.", "ok"));
+    host.append(check("Buy size", "Native balance covers the fixed " + BUY_SOL + " SOL buy.", "ok"));
   }
   host.append(check(
     "Sells",
-    "Copy sell is on when " + TARGET_NAME + " sells. Take profit sells 50% at +100%. Stop loss sells 100% at −30%.",
+    "Copy sell is on when " + TARGET_NAME + " sells. Auto sell is on: 50% at +100% and 100% at −30%.",
     "wait"
   ));
 }
@@ -1350,6 +1413,7 @@ function deskSnapshot() {
   const now = new Date();
   const book = portfolio();
   const spot = vaultSpot(book);
+  const today = currentToday(book);
   const agents = AGENTS.map((agent) => {
     const phase = botPhase(agent, now);
     return {
@@ -1438,9 +1502,9 @@ function deskSnapshot() {
     });
   }
   return {
-    vaultUsd: book.pnlUsd == null ? "—" : fmtPnlUsd(book.pnlUsd),
-    vaultSol: book.pnlSol == null ? "P&L waiting" : fmtPnlSol(book.pnlSol),
-    vaultDir: book.pnlUsd,
+    vaultUsd: today.usd == null ? "—" : fmtPnlUsd(today.usd),
+    vaultSol: today.sol == null ? "since midnight" : fmtPnlSol(today.sol),
+    vaultDir: today.usd != null ? today.usd : today.sol,
     vaultBalanceUsd: fmtVaultBalanceUsd(spot),
     vaultBalanceSol: fmtVaultBalanceSol(spot),
     vaultAllUsd: fmtVaultAllUsd(spot),

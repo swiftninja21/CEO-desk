@@ -556,6 +556,12 @@ h1 {
 
 .pos-name { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .pos-name strong { font-size: 14px; }
+.era {
+  color: var(--amber);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
 .pos-name span, .pos-links, .pos-note {
   color: var(--muted);
   font-size: 11px;
@@ -787,6 +793,12 @@ body.show-desk #desk { display: block; }
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
+#vault-today.pos .vault-kicker,
+#vault-today.pos .vault-usd,
+#vault-today.pos .vault-sol { color: var(--green); }
+#vault-today.neg .vault-kicker,
+#vault-today.neg .vault-usd,
+#vault-today.neg .vault-sol { color: var(--red); }
 #vault-balance .vault-kicker,
 #vault-balance .vault-balance-usd { color: #3de4ff; }
 #vault-balance .vault-balance-sol { color: rgba(61, 228, 255, 0.78); }

@@ -56,7 +56,7 @@
       <div id="tower-labels"></div>
       <button type="button" id="vault-label" class="vault-label">
         <span class="vault-block" id="vault-today">
-          <span class="vault-kicker">The Vault · today</span>
+          <span class="vault-kicker">Today</span>
           <strong class="vault-usd">—</strong>
           <span class="vault-sol">—</span>
         </span>
@@ -89,7 +89,7 @@
     <div class="office-layout">
       <section class="monitor">
         <h3>Signal log</h3>
-        <p class="fine">Scheduled lines are marked scheduled. Numbers come from the copying wallet, Killua, or the cron.</p>
+        <p class="fine">Scheduled lines are marked scheduled. Numbers come from the copying wallet, 8P, or the cron.</p>
         <ol id="office-log"></ol>
       </section>
       <section class="monitor">
@@ -185,13 +185,32 @@
 
     <section class="card" aria-labelledby="target-title">
       <div class="card-head">
-        <h2 id="target-title">Killua</h2>
-        <button type="button" class="ghost" data-copy-target data-copy="95TWoKkvv2z85EXBzd2z6NwbxH2f54AvwuCA9x3NoKep">copy</button>
+        <h2 id="target-title">8P</h2>
+        <button type="button" class="ghost" data-copy-target data-copy="8pYLN2Zm9ECVRXHRcU7a4tYpSPMaJME3Qt7JKa9LirEG">copy</button>
       </div>
       <p class="fine">Copy target</p>
-      <a class="addr" id="target-addr" href="https://solscan.io/account/95TWoKkvv2z85EXBzd2z6NwbxH2f54AvwuCA9x3NoKep" target="_blank" rel="noopener noreferrer">95TWoKkvv2z85EXBzd2z6NwbxH2f54AvwuCA9x3NoKep</a>
+      <a class="addr" id="target-addr" href="https://solscan.io/account/8pYLN2Zm9ECVRXHRcU7a4tYpSPMaJME3Qt7JKa9LirEG" target="_blank" rel="noopener noreferrer">8pYLN2Zm9ECVRXHRcU7a4tYpSPMaJME3Qt7JKa9LirEG</a>
       <p class="fine">Backup · none</p>
       <div id="target-body"><p class="muted">Loading last successful signature…</p></div>
+    </section>
+
+    <section class="card" aria-labelledby="stats-title">
+      <div class="card-head">
+        <h2 id="stats-title">8P · 7 days</h2>
+      </div>
+      <p class="fine">Verified on-chain about 6:16 PM ET on Nov 11, 2026. This card is a recorded check, not a live counter.</p>
+      <dl class="rules">
+        <div><dt>Closed</dt><dd>19</dd></div>
+        <div><dt>Wins</dt><dd>16 · 84%</dd></div>
+        <div><dt>Realized</dt><dd>+13.8 SOL</dd></div>
+        <div><dt>Ex best</dt><dd>+7.9 SOL</dd></div>
+        <div><dt>Green days</dt><dd>6 of 7</dd></div>
+        <div><dt>Median hold</dt><dd>~26 min</dd></div>
+        <div><dt>Worst trade</dt><dd>−12%</dd></div>
+        <div><dt>Typical buy</dt><dd>~2 SOL</dd></div>
+        <div><dt>First seen</dt><dd>Nov 5, 2026</dd></div>
+        <div><dt>Scam check</dt><dd>Clean · created none of the 21 coins traded, never bundled with the dev, buys after 1,000+ txs</dd></div>
+      </dl>
     </section>
 
     <section class="card" aria-labelledby="pos-title">
@@ -205,25 +224,26 @@
       <div class="card-head">
         <h2 id="risk-title">Risk</h2>
       </div>
-      <p class="fine" id="risk-effective">Effective Nov 8, 2026 · ~11:52 AM ET</p>
-      <p class="fine">Min liquidity cleared Nov 8, 2026 · ~2:26 PM ET. Max open and the day stop are personal rules. Trojan does not enforce them.</p>
+      <p class="fine" id="risk-effective">Effective Nov 11, 2026 · 6:53 PM ET</p>
+      <p class="fine">Max open and the day stop are Aj's rules. Trojan does not enforce them. The day stop uses today's change since midnight ET.</p>
       <dl class="rules">
-        <div><dt>Target</dt><dd id="risk-target">Killua</dd></div>
-        <div><dt>Target wallet</dt><dd id="risk-target-wallet">95TWoKkvv2z85EXBzd2z6NwbxH2f54AvwuCA9x3NoKep</dd></div>
+        <div><dt>Target</dt><dd id="risk-target">8P</dd></div>
+        <div><dt>Target wallet</dt><dd id="risk-target-wallet">8pYLN2Zm9ECVRXHRcU7a4tYpSPMaJME3Qt7JKa9LirEG</dd></div>
         <div><dt>Backup</dt><dd>None</dd></div>
         <div><dt>Copy wallet</dt><dd>W1 · 7MDqGWcdgesJHxWs2a1YSaKobcqWe7yU5kjz4XNBKPMa</dd></div>
-        <div><dt>Buy</dt><dd>0.1 SOL fixed</dd></div>
+        <div><dt>Buy</dt><dd>0.05 SOL</dd></div>
         <div><dt>Priority fee</dt><dd>0.001</dd></div>
         <div><dt>Bribe</dt><dd>0.0005</dd></div>
         <div><dt>Slippage</dt><dd>15%</dd></div>
         <div><dt>MEV</dt><dd>On</dd></div>
-        <div><dt>Copy sell</dt><dd id="risk-copy-sell">On · when Killua sells</dd></div>
+        <div><dt>Copy sell</dt><dd id="risk-copy-sell">On · when 8P sells</dd></div>
+        <div><dt>Auto sell</dt><dd>On</dd></div>
         <div><dt>Take profit</dt><dd>Sell 50% at +100%</dd></div>
         <div><dt>Stop loss</dt><dd>Sell 100% at −30%</dd></div>
         <div><dt>Min liquidity</dt><dd>None</dd></div>
         <div><dt>Market cap</dt><dd>None</dd></div>
-        <div><dt>Max spend</dt><dd>0.1 SOL</dd></div>
-        <div><dt>Launchpads</dt><dd>Allowed</dd></div>
+        <div><dt>Max spend</dt><dd>0.05 SOL</dd></div>
+        <div><dt>Exclude launchpad</dt><dd>Off</dd></div>
         <div><dt>Duplicate buys</dt><dd>Prevented</dd></div>
         <div><dt>Max open</dt><dd>2 · personal rule</dd></div>
         <div><dt>Day stop</dt><dd>After −$10 · personal rule</dd></div>
@@ -237,18 +257,19 @@
       </div>
       <div class="history">
         <p class="fine">History</p>
+        <p>Nov 11, 2026 · 6:53 PM ET · Switched leader: paused Killua, now copying 8P (8pYLN2…LirEG) at 0.05 SOL.</p>
+        <p>Killua-era · Nov 8, 2026 · 4:00:12 PM ET · Sold half of the PUSSY buy for 0.093487197 SOL net.</p>
+        <p>Killua-era · Nov 8, 2026 · 3:41:27 PM ET · Bought 9,654.832242 PUSSY for 0.1 SOL. Mint FZxHLUGiGchY5uvvoeqh1EKiXTrGdN67WUBhUc1fLoat.</p>
+        <p>Killua-era · Nov 8, 2026 · ~2:26 PM ET · Min liquidity cleared. It had been $20,000.</p>
+        <p>Killua-era · Nov 8, 2026 · ~11:52 AM ET · Switched the copy target to Killua. Johnson is no longer the target. Backup is none.</p>
         <p>Nov 7, 2026 · 3:36 PM ET · Copy target was Johnson, J9TYAsWWidbrcZybmLSfrLzryANf4CgJBLdvwdGuC8MB, with backup Doji, 5ZuV8eqkvzYFVEKbLvGBdexL2tFv7E5BCd2HZpjqbdg.</p>
-        <p>Nov 8, 2026 · ~11:52 AM ET · Switched the copy target to Killua. Johnson is no longer the target. Backup is none.</p>
-        <p>Nov 8, 2026 · ~2:26 PM ET · Min liquidity cleared. It had been $20,000.</p>
-        <p>Nov 8, 2026 · 3:41:27 PM ET · Bought 9,654.832242 PUSSY for 0.1 SOL. Mint FZxHLUGiGchY5uvvoeqh1EKiXTrGdN67WUBhUc1fLoat.</p>
-        <p>Nov 8, 2026 · 4:00:12 PM ET · Sold half of that buy for 0.093487197 SOL net.</p>
       </div>
       <div class="log" id="log"><p class="muted">Loading recent signatures…</p></div>
     </section>
 
     <footer>
       <p>Read-only public data. Solana JSON-RPC, CoinGecko, DexScreener, and Coinbase. No wallet connection and no private keys.</p>
-      <p>P/L is cash SOL plus the market value of held tokens, minus the 1.106 SOL starting capital. USD is that SOL result at the current SOL price. Cash alone is not used while a token is held. The $99.10 figure is the stake recorded at 12:08 PM ET on Nov 7, 2026.</p>
+      <p>All-time P/L is cash SOL plus the market value of held tokens, minus the 1.106 SOL starting capital. Today is that same portfolio minus the midnight America/New_York baseline. USD is the SOL result at the current SOL price. Cash alone is not used while a token is held.</p>
     </footer>
   </div>
   <noscript>

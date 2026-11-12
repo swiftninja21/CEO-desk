@@ -394,12 +394,14 @@ export function mountCity(getSnapshot) {
       write(".vault-balance-sol", snap.vaultBalanceSol);
       write(".vault-all-usd", snap.vaultAllUsd);
       write(".vault-all-sol", snap.vaultAllSol);
-      const allLine = vaultEl.querySelector("#vault-all");
-      if (allLine) {
-        const dir = snap.vaultAllDir;
-        allLine.classList.toggle("pos", typeof dir === "number" && dir > 0);
-        allLine.classList.toggle("neg", typeof dir === "number" && dir < 0);
-      }
+      const paintDir = (id, dir) => {
+        const line = vaultEl.querySelector(id);
+        if (!line) return;
+        line.classList.toggle("pos", typeof dir === "number" && dir > 0);
+        line.classList.toggle("neg", typeof dir === "number" && dir < 0);
+      };
+      paintDir("#vault-today", snap.vaultDir);
+      paintDir("#vault-all", snap.vaultAllDir);
     }
     placeLabels(false);
     placeVault();
